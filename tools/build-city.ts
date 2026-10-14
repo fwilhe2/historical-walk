@@ -122,8 +122,10 @@ function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
     if (y) b.year = y;
     // A flat roof on a house built before 1880 is today's roof or a
     // mapping shortcut: the town's baroque and classicist houses had
-    // pitched roofs. Such a house gets a hipped roof of its depth.
-    if (shape === 'flat' && y !== undefined && y < 1880 && depth > 4) {
+    // pitched roofs. Such a house gets a hipped roof of its depth; so
+    // does an undated one of two storeys or more (kept by the 1903 map,
+    // so standing on a block of the year). Yard sheds stay flat.
+    if (shape === 'flat' && depth > 4 && ((y !== undefined && y < 1880) || (y === undefined && eave > 6))) {
       b.roof = 'hipped'; b.roofH = round(Math.min(depth * 0.45, 8));
     }
     if (kind) b.kind = kind;
