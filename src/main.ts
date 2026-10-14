@@ -18,6 +18,7 @@ import { hud, note } from './ui/hud';
 import { historicMap } from './ui/map';
 import { sound } from './audio/sound';
 import { parseView, viewHash } from './app/view';
+import { quality } from './render/quality';
 import { makeTour } from './app/tour';
 
 /* ── Boot ───────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const people = buildPeople(city);
 scene.add(people.group);
 const boats = buildBoats(city, ground);
 scene.add(boats.group);
+quality.apply();
 const segs = buildSegs(city);
 const tour = makeTour(city);
 // The sky through the environment map is the ambient light: about
@@ -104,6 +106,7 @@ addEventListener('keydown', (e) => {
     sourceView.value = 1 - sourceView.value;
     note(sourceView.value ? 'GREEN STANDS TODAY · BLUE LOST (OHM) · ORANGE REBUILT FROM THE 1903 MAP · VIOLET MODELLED' : 'SOURCES OFF');
   }
+  if (e.code === 'KeyQ') { note('QUALITY ' + quality.cycle().toUpperCase()); scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; }); }
   if (e.code === 'KeyN') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   if (e.code === 'BracketRight') sunState.hour = Math.min(21.5, sunState.hour + 0.25);
   if (e.code === 'BracketLeft') sunState.hour = Math.max(4, sunState.hour - 0.25);

@@ -17,7 +17,7 @@ Click to walk. **WASD** walk, **Shift** walk briskly, mouse looks.
 Messtischblatt of 1903 at your position, **[ ]** move the sun through
 the day, **T** takes a guided walk from landmark to landmark along the
 streets, **G** jumps to the next landmark, **V** tints every building by
-its source, **N** mutes the sound, **H**
+its source, **N** mutes the sound, **Q** cycles the quality, **H**
 hides the HUD. Time runs at the clock's pace: the Garnisonkirche strikes
 the hours, St. Nikolai the quarters. The URL hash always holds your
 position, so a view can be shared.
