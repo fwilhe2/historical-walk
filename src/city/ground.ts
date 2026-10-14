@@ -74,8 +74,20 @@ export function buildGround(city: City): Ground {
   // Bridges over the water.
   for (const s of city.streets) if (s.kind === 'bridge' || s.kind === 'footbridge') stroke(s.pts, s.w, s.kind === 'bridge' ? SETTS : SLABS);
 
-  const tA = new THREE.CanvasTexture(cA), tB = new THREE.CanvasTexture(cB);
-  for (const t of [tA, tB]) {
+  // Contact shade: every footprint, blurred by a few metres, darkens
+  // the ground's ambient light beside the walls (and under the eaves).
+  const cC = document.createElement('canvas');
+  cC.width = cC.height = RES / 2;
+  const c = cC.getContext('2d')!;
+  c.fillStyle = '#000'; c.fillRect(0, 0, RES / 2, RES / 2);
+  c.setTransform(sx / 2, 0, 0, sz / 2, -x0 * sx / 2, -z0 * sz / 2);
+  c.filter = 'blur(2px)';
+  c.fillStyle = '#fff';
+  c.beginPath();
+  for (const bd of city.buildings) if ((bd.base ?? 0) < 2) ring(c, bd.outer);
+  c.fill('nonzero');
+  const tA = new THREE.CanvasTexture(cA), tB = new THREE.CanvasTexture(cB), tC = new THREE.CanvasTexture(cC);
+  for (const t of [tA, tB, tC]) {
     t.flipY = false; t.colorSpace = THREE.NoColorSpace;
     t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
     t.anisotropy = 4; t.generateMipmaps = true;
@@ -93,7 +105,7 @@ export function buildGround(city: City): Ground {
   geo.rotateX(-Math.PI / 2);
   geo.translate(x0 + W / 2, 0, z0 + H / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
-  const uni = { tA: { value: tA }, tB: { value: tB }, uB: { value: new THREE.Vector4(x0, z0, W, H) } };
+  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, uB: { value: new THREE.Vector4(x0, z0, W, H) } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     sh.vertexShader = sh.vertexShader
@@ -126,7 +138,7 @@ export function buildGround(city: City): Ground {
 }
 
 const GROUND_PARS = /* glsl */ `
-uniform sampler2D tA, tB;
+uniform sampler2D tA, tB, tC;
 uniform vec4 uB;
 varying vec3 vW;
 float gH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -160,18 +172,18 @@ const GROUND_MAP = /* glsl */ `
   vec2 cell = floor(sp), f = fract(sp);
   float joint = smoothstep(0.0, 0.12 + aa, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)) * 1.6);
   float tone = gH(cell);
-  vec3 setts = mix(vec3(0.27, 0.26, 0.25), vec3(0.47, 0.44, 0.41), tone) * mix(0.55, 1.0, mix(joint, 0.82, aa));
+  vec3 setts = mix(vec3(0.07, 0.068, 0.065), vec3(0.2, 0.185, 0.17), tone) * mix(0.55, 1.0, mix(joint, 0.82, aa));
   setts *= 0.85 + 0.3 * gF(p * 0.35);
   // large granite slabs with a mosaic strip beside them
   vec2 lp = p / vec2(1.2, 0.9);
   vec2 lf = fract(lp);
   float lj = smoothstep(0.0, 0.03 + aa * 0.2, min(min(lf.x, 1.0 - lf.x), min(lf.y, 1.0 - lf.y)));
-  vec3 slabs = mix(vec3(0.5, 0.49, 0.47), vec3(0.6, 0.58, 0.55), gH(floor(lp))) * mix(0.7, 1.0, lj);
+  vec3 slabs = mix(vec3(0.17, 0.165, 0.155), vec3(0.24, 0.23, 0.215), gH(floor(lp))) * mix(0.7, 1.0, lj);
   slabs *= 0.9 + 0.2 * gF(p * 1.7);
-  vec3 grass = mix(vec3(0.17, 0.24, 0.08), vec3(0.3, 0.36, 0.13), gF(p * 0.6)) * (0.85 + 0.3 * gN(p * 6.0));
-  vec3 gravel = mix(vec3(0.55, 0.5, 0.42), vec3(0.66, 0.6, 0.5), gF(p * 2.5)) * (0.9 + 0.15 * gH(floor(p * 18.0)));
-  vec3 earth = mix(vec3(0.33, 0.28, 0.21), vec3(0.43, 0.37, 0.28), gF(p * 0.8));
-  vec3 rail = mix(vec3(0.24, 0.22, 0.2), vec3(0.34, 0.3, 0.27), gH(floor(p * 12.0)));
+  vec3 grass = mix(vec3(0.04, 0.07, 0.015), vec3(0.09, 0.13, 0.03), gF(p * 0.6)) * (0.85 + 0.3 * gN(p * 6.0));
+  vec3 gravel = mix(vec3(0.24, 0.21, 0.16), vec3(0.32, 0.28, 0.21), gF(p * 2.5)) * (0.9 + 0.15 * gH(floor(p * 18.0)));
+  vec3 earth = mix(vec3(0.12, 0.095, 0.065), vec3(0.19, 0.155, 0.11), gF(p * 0.8));
+  vec3 rail = mix(vec3(0.06, 0.055, 0.05), vec3(0.12, 0.105, 0.09), gH(floor(p * 12.0)));
 
   float wS = sA.r, wL = sA.g * (1.0 - wS), wG = sA.b, wR = sB.g, wV = sB.b;
   float wE = max(0.0, 1.0 - wS - wL - wG - wR - wV);
@@ -185,5 +197,8 @@ const GROUND_MAP = /* glsl */ `
     gBump = vec3(d.x, 0.0, d.y) * 2.2 * wS * (1.0 - aa);
     gBump = (viewMatrix * vec4(gBump, 0.0)).xyz;
   }
+  // beside walls the sky is half hidden
+  float occ = texture2D(tC, tuv).r;
+  col *= 1.0 - 0.45 * occ;
   diffuseColor.rgb = col;
 `;

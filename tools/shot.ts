@@ -39,7 +39,7 @@ try {
     await page.evaluate((h) => window.hw!.go(h), hash);
     await page.evaluate(() => window.hw!.frames(4));
     await page.screenshot({ path: path.join(out, name + '.png') as `${string}.png` });
-    log('shot ' + name);
+    log('shot ' + name + ' ' + await page.evaluate(() => window.hw!.state()));
   }
 } finally {
   await browser.close();

@@ -8,7 +8,7 @@ import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
 import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
-import { SUN_DIR, placeShadow, sky, sunState, updateSun } from './render/sky';
+import { SUN_DIR, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
 import { hud, note } from './ui/hud';
 import { parseView, viewHash } from './app/view';
 
@@ -27,6 +27,12 @@ scene.add(buildBuildings(city.buildings));
 scene.add(buildTrees(city));
 scene.add(buildWalls(city));
 const segs = buildSegs(city);
+// The sky through the environment map is the ambient light: about
+// a fifth of the sun's on a clear afternoon, which 0.7 gives here.
+scene.traverse((o) => {
+  const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+  if (m && 'envMapIntensity' in m && m.roughness > 0.3) m.envMapIntensity = 0.7;
+});
 
 // Reflections: the sky alone, prefiltered for the standard materials,
 // rebuilt when the sun has moved far enough to show.
@@ -90,6 +96,9 @@ if (probe) {
       walker.fly = v.y !== undefined;
       if (v.y !== undefined) walker.flyY = walker.y = v.y;
       await this.frames(3);
+    },
+    state() {
+      return JSON.stringify({ sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };

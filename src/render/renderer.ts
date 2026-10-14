@@ -9,8 +9,8 @@ renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // AgX: a gentle toe and film-like highlights, so a sunlit facade and
 // the street in its shadow both keep their detail.
-renderer.toneMapping = THREE.AgXToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.75;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 export const ANISO = renderer.capabilities.getMaxAnisotropy();

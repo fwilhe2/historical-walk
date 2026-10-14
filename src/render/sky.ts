@@ -27,7 +27,7 @@ Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near:
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
-export const hemi = new THREE.HemisphereLight(0xbfd4ee, 0x8a7f6c, 1.0);
+export const hemi = new THREE.HemisphereLight(0xfff0dc, 0xb59a78, 0.3);
 scene.add(hemi);
 scene.fog = new THREE.FogExp2(0xc9d3dc, 0.0011);
 
@@ -51,18 +51,17 @@ export function sunDirection(hour: number, day: number, latDeg: number, out: THR
   return { alt, az };
 }
 
-const _horizon = new THREE.Color(), _zen = new THREE.Color();
 export function updateSun(lat: number) {
   const { alt } = sunDirection(sunState.hour, sunState.day, lat, SUN_DIR);
   su.sunPosition!.value.copy(SUN_DIR);
   const e = Math.max(0, Math.sin(alt));
   // Light falls off and reddens toward the horizon; below it, dusk.
   const day = THREE.MathUtils.smoothstep(alt, -0.1, 0.12);
-  sun.intensity = 3.4 * THREE.MathUtils.smoothstep(alt, -0.02, 0.2);
+  sun.intensity = 4.2 * THREE.MathUtils.smoothstep(alt, -0.02, 0.2);
   sun.color.setRGB(1, 0.78 + 0.2 * Math.min(1, e * 2.2), 0.6 + 0.36 * Math.min(1, e * 2));
-  hemi.intensity = 0.15 + 0.95 * day;
-  _zen.setRGB(0.55, 0.68, 0.86); _horizon.setRGB(0.86, 0.84, 0.8);
-  hemi.color.copy(_zen).lerp(_horizon, 0.3).multiplyScalar(0.4 + 0.6 * day);
+  // The sky's own light comes from the environment map (main.ts); the
+  // hemisphere only adds the warm bounce off sunlit streets and walls.
+  hemi.intensity = 0.05 + 0.3 * day * Math.min(1, e * 3);
   const fog = scene.fog as THREE.FogExp2;
   fog.color.setRGB(0.78, 0.82, 0.86).lerp(new THREE.Color(0.95, 0.72, 0.55), Math.max(0, 1 - e * 4) * day * 0.5).multiplyScalar(0.25 + 0.75 * day);
   return alt;
