@@ -10,10 +10,16 @@
    - OpenHistoricalMap, the same data model with start_date/end_date
      on every feature: the lost buildings (Stadtschloss,
      Garnisonkirche, …) and old streets and water. CC0.
+   - A historical map as a raster, when the city has one (CitySpec.map):
+     for Potsdam the Messtischblatt sheets of 1903 from the Land's WMS,
+     at about a metre a pixel, stored grey. tools/mask.ts reads the
+     built-up blocks from its hatching.
 
    Usage: node tools/fetch.ts <city> */
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
 import { CITIES } from './cities.ts';
+import { projector } from './osm.ts';
 
 const UA = 'historical-walk/0.1 (https://github.com/fwilhe2/historical-walk)';
 type Tags = Record<string, string>;
@@ -108,7 +114,29 @@ const city = CITIES[id];
 if (!city) throw new Error(`unknown city ${id}; known: ${Object.keys(CITIES).join(', ')}`);
 const dir = `data/${id}`;
 mkdirSync(dir, { recursive: true });
+async function historicalMap(spec: NonNullable<(typeof CITIES)[string]['map']>, bb: [number, number, number, number], origin: [number, number]) {
+  const [s, w, n, e] = bb;
+  const { fwd } = projector(origin[0], origin[1]);
+  const [x0, z0] = fwd(n, w), [x1, z1] = fwd(s, e);
+  // About a metre a pixel; the WMS resamples the scan (1:25 000 at
+  // its scanning resolution is 1.5–2 m a pixel), and EPSG:4326 keeps
+  // pixels linear in lat/lon like the local frame.
+  const W = Math.round((x1 - x0) / spec.mpp), H = Math.round((z1 - z0) / spec.mpp);
+  const url = `${spec.wms}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${spec.layer}&STYLES=&SRS=EPSG:4326&BBOX=${w},${s},${e},${n}&WIDTH=${W}&HEIGHT=${H}&FORMAT=image/png`;
+  console.log('historical map', W, 'x', H);
+  const r = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!r.ok) throw new Error('map ' + r.status);
+  const png = PNG.sync.read(Buffer.from(await r.arrayBuffer()));
+  const grey = new PNG({ width: png.width, height: png.height, colorType: 0, inputColorType: 0, bitDepth: 8, inputHasAlpha: false });
+  grey.data = Buffer.alloc(png.width * png.height);
+  for (let i = 0; i < png.width * png.height; i++) {
+    grey.data[i] = Math.round(0.299 * png.data[4 * i]! + 0.587 * png.data[4 * i + 1]! + 0.114 * png.data[4 * i + 2]!);
+  }
+  return PNG.sync.write(grey, { colorType: 0, inputColorType: 0, inputHasAlpha: false });
+}
+
 const which = process.argv[3];
 if (!which || which === 'osm') writeFileSync(`${dir}/osm.json`, JSON.stringify(await osm(city.bbox, 0.006)));
 if (!which || which === 'ohm') writeFileSync(`${dir}/ohm.json`, JSON.stringify(await ohm(city.bbox)));
+if ((!which || which === 'map') && city.map) writeFileSync(`${dir}/${city.map.file}`, await historicalMap(city.map, city.bbox, city.origin));
 console.log('done');

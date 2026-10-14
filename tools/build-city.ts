@@ -13,9 +13,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
-import { area, bbox, centroid, inside, orient, simplify, type Ring } from '../src/geom/poly.ts';
+import { area, bbox, centroid, inside, inset, obb, orient, simplify, straighten, type Ring } from '../src/geom/poly.ts';
 import type { Area, AreaKind, Building, City, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
 import { HISTORY } from './history/index.ts';
+import { blockOutlines, loadMask, maskShare, type Mask } from './mask.ts';
 
 const id = process.argv[2] ?? 'potsdam';
 const spec = CITIES[id];
@@ -26,6 +27,7 @@ const { fwd } = projector(spec.origin[0], spec.origin[1]);
 const osm = load(`data/${id}/osm.json`, fwd);
 const ohm = load(`data/${id}/ohm.json`, fwd);
 const [bx0, bz1] = fwd(spec.bbox[0], spec.bbox[1]), [bx1, bz0] = fwd(spec.bbox[2], spec.bbox[3]);
+const mask: Mask | null = spec.map ? loadMask(`data/${id}/${spec.map.file}`, fwd(spec.bbox[2], spec.bbox[1]), fwd(spec.bbox[0], spec.bbox[3])) : null;
 const inBounds = (p: Pt) => p[0] >= bx0 && p[0] <= bx1 && p[1] >= bz0 && p[1] <= bz1;
 
 const flat = (pts: Pt[]): Ring => pts.flatMap((p) => [round(p[0]), round(p[1])]);
@@ -162,6 +164,13 @@ for (const f of osm.feats) {
   if (covers(ohmAlive, cx, cz)) { stats.osmDroppedOhm++; continue; }   // OHM has the 1900 building here
   if (y === undefined) {
     if (covers(ohmLater, cx, cz)) { stats.osmDroppedLater++; continue; }
+    // Undated: kept where the historical map has the ground built up,
+    // and when it does not look like a building of after 1900 (five
+    // storeys and up, or a flat roof over three) — the slabs of the
+    // 1960s and 70s that went up on the bombed old town's blocks.
+    const lv = num(t['building:levels']) ?? 0;
+    const modern = lv >= 5 || (t['roof:shape'] === 'flat' && lv >= 3);
+    if (mask && (modern || maskShare(mask, flat(f.outer[0])) < 0.5)) { stats.osmDroppedMask++; continue; }
     stats.osmUndated++;
   } else stats.osmDated++;
   buildings.push(...toBuilding(f, 'osm'));
@@ -205,6 +214,86 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 // Modern areas (water and green) first, then what OHM says of 1900 on top.
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
+
+/* ── Lost frontage, rebuilt from the historical map's blocks ──────
+   Inside the closely built town every block of the map was lined
+   with houses wall to wall. Each block's outline is walked edge by
+   edge and cut into parcels of 10–16 m frontage and a house's depth;
+   a parcel is built unless a kept building already stands on it, or
+   it falls in water or in a square or park of the year. What gets
+   built is a plain townhouse of its time and place — two or three
+   storeys, the ridge along the street, a gable or mansard roof — not
+   the house that stood there, which the map cannot tell. */
+if (mask) {
+  const grid = new Map<string, Building[]>();
+  const G = 25;
+  for (const b of buildings) {
+    const [x0, z0, x1, z1] = bbox(b.outer);
+    for (let i = Math.floor(x0 / G); i <= Math.floor(x1 / G); i++) for (let j = Math.floor(z0 / G); j <= Math.floor(z1 / G); j++) {
+      const k = i + ',' + j;
+      let l = grid.get(k);
+      if (!l) grid.set(k, (l = []));
+      l.push(b);
+    }
+  }
+  const built = (x: number, z: number) => (grid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((b) => inside(b.outer, x, z));
+  const open = areas.filter((a) => a.kind !== 'water');
+  const water = areas.filter((a) => a.kind === 'water');
+  const inAny = (as: Area[], x: number, z: number) => as.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)));
+  let n = 0;
+  for (const raw of blockOutlines(mask, 250)) {
+    // The blur and the closing grow the map's blocks by a metre or
+    // two past the building line; take the frontage that far in.
+    const ring = inset(straighten(orient(simplify(raw, 1.5), true), 0.45, 2.5), 1.8);
+    const box = obb(ring);
+    const maxDepth = Math.min(12.5, box.b * 0.9);
+    if (maxDepth < 5) continue;
+    const m = ring.length / 2;
+    for (let e = 0; e < m; e++) {
+      const p = (e + m - 1) % m, q = (e + 1) % m;
+      const ax = ring[2 * e]!, az = ring[2 * e + 1]!, bx2 = ring[2 * q]!, bz2 = ring[2 * q + 1]!;
+      const px = ring[2 * p]!, pz = ring[2 * p + 1]!;
+      const dx = bx2 - ax, dz = bz2 - az, L = Math.hypot(dx, dz);
+      if (L < 6) continue;
+      const ux = dx / L, uz = dz / L, ix = -uz, iz = ux;   // along, inward
+      // A convex corner at the start belongs to the previous edge's last
+      // parcel, which runs to its end and a house deep: start past it.
+      const pl = Math.hypot(ax - px, az - pz) || 1;
+      const sinTurn = ((ax - px) * dz - (az - pz) * dx) / (pl * L);
+      const s0 = sinTurn > 0.7 ? Math.min(maxDepth, L * 0.5) : 0;
+      const len = L - s0;
+      if (len < 5) continue;
+      const seed = hashStr(`${Math.round(ax)},${Math.round(az)}`);
+      const target = 10 + (seed % 7);
+      const k = Math.max(1, Math.round(len / target));
+      for (let i = 0; i < k; i++) {
+        const t0 = s0 + (len * i) / k, t1 = s0 + (len * (i + 1)) / k;
+        const ps = hashStr(`${e}:${i}:${seed}`);
+        const depth = maxDepth * (0.85 + 0.15 * ((ps >> 3) % 7) / 6);
+        const f0x = ax + ux * t0, f0z = az + uz * t0, f1x = ax + ux * t1, f1z = az + uz * t1;
+        // samples a step inside the frontage: any one built, water or open means no house
+        let skip = !inside(hist.town, (f0x + f1x) / 2 + ix * depth / 2, (f0z + f1z) / 2 + iz * depth / 2);
+        for (const f of [0.15, 0.5, 0.85]) for (const d of [1.5, 4, depth * 0.85]) {
+          const sx = f0x + (f1x - f0x) * f + ix * d, sz = f0z + (f1z - f0z) * f + iz * d;
+          if (built(sx, sz) || inAny(water, sx, sz) || inAny(open, sx, sz) || !mask.at(sx, sz)) skip = true;
+        }
+        if (skip) continue;
+        const outer = orient([f0x, f0z, f1x, f1z, f1x + ix * depth, f1z + iz * depth, f0x + ix * depth, f0z + iz * depth].map(round), true);
+        if (Math.abs(area(outer)) < 20) continue;
+        const levels = ps % 5 < 3 ? 3 : 2;
+        const storey = 3.3 + (ps % 3) * 0.1;
+        const roof: RoofShape = ps % 10 < 3 ? 'mansard' : 'gabled';
+        buildings.push({
+          id: `mtb${n++}`, src: 'mtb', outer,
+          eave: round(levels * storey + 0.6), roofH: round(depth * (roof === 'mansard' ? 0.42 : 0.48)), roof,
+          ridge: Math.atan2(uz, ux), storey,
+          colour: PLASTER[(ps >> 5) % PLASTER.length]!, roofColour: (ps >> 9) % 6 === 0 ? '#555a60' : '#9b4f37',
+        });
+        stats.mtb++;
+      }
+    }
+  }
+}
 
 /* ── Streets ──────────────────────────────────────────────────── */
 const WIDTH: Record<string, [StreetKind, number]> = {

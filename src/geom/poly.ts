@@ -125,3 +125,48 @@ export function simplify(r: Ring, eps: number): Ring {
   for (let i = 0; i < n; i++) if (keep[i]) o.push(r[2 * i]!, r[2 * i + 1]!);
   return o.length >= 6 ? o : r;
 }
+
+/* Move every edge of a ring d metres inward (d < 0: outward), with
+   mitred corners whose reach is capped at 3d, so a sharp corner
+   cannot shoot across the polygon. Assumes positive orientation. */
+export function inset(r: Ring, d: number): Ring {
+  const n = r.length / 2, o: Ring = [];
+  for (let i = 0; i < n; i++) {
+    const p = (i + n - 1) % n, q = (i + 1) % n;
+    const x = r[2 * i]!, z = r[2 * i + 1]!;
+    let ax = x - r[2 * p]!, az = z - r[2 * p + 1]!, bx = r[2 * q]! - x, bz = r[2 * q + 1]! - z;
+    const la = Math.hypot(ax, az) || 1, lb = Math.hypot(bx, bz) || 1;
+    ax /= la; az /= la; bx /= lb; bz /= lb;
+    // inward normals of a positive ring: (−dz, dx)
+    let nx = -az - bz, nz = ax + bx;
+    const nl = Math.hypot(nx, nz);
+    if (nl < 1e-9) { nx = -az; nz = ax; } else { nx /= nl; nz /= nl; }
+    const cosHalf = Math.max(1 / 3, nx * -az + nz * ax);
+    o.push(x + nx * d / cosHalf, z + nz * d / cosHalf);
+  }
+  return o;
+}
+
+/* Drop vertices where the outline turns by less than minTurn
+   radians, as long as that moves it by no more than maxShift metres:
+   a traced pixel outline's wobble, merged into straight frontages. */
+export function straighten(r: Ring, minTurn: number, maxShift: number): Ring {
+  let o = r.slice();
+  for (let changed = true; changed && o.length > 6;) {
+    changed = false;
+    const n = o.length / 2;
+    let best = -1, bestTurn = minTurn;
+    for (let i = 0; i < n; i++) {
+      const p = (i + n - 1) % n, q = (i + 1) % n;
+      const ax = o[2 * i]! - o[2 * p]!, az = o[2 * i + 1]! - o[2 * p + 1]!;
+      const bx = o[2 * q]! - o[2 * i]!, bz = o[2 * q + 1]! - o[2 * i + 1]!;
+      const turn = Math.abs(Math.atan2(ax * bz - az * bx, ax * bx + az * bz));
+      if (turn >= bestTurn) continue;
+      const d = Math.sqrt(segDist2(o[2 * i]!, o[2 * i + 1]!, o[2 * p]!, o[2 * p + 1]!, o[2 * q]!, o[2 * q + 1]!));
+      if (d > maxShift) continue;
+      best = i; bestTurn = turn;
+    }
+    if (best >= 0) { o.splice(2 * best, 2); changed = true; }
+  }
+  return o;
+}

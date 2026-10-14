@@ -10,6 +10,10 @@ export interface History {
   credits: string[];
   drop: Set<string>;                                 // feature ids ('w123', 'ohm:r456') never to draw
   patch: Record<string, Partial<Building>>;          // corrections by building id
+  // The closely built town, in local metres: lost frontage inside it
+  // is rebuilt as rows of houses from the historical map's blocks.
+  // Outside (suburbs of villas and gardens) nothing is invented.
+  town: number[];
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };
