@@ -63,7 +63,8 @@ export function buildPeople(city: City) {
     let L = 0;
     for (let i = 2; i < s.pts.length; i += 2) L += Math.hypot(s.pts[i]! - s.pts[i - 2]!, s.pts[i + 1]! - s.pts[i - 1]!);
     const mx = s.pts[0]!, mz = s.pts[1]!;
-    const central = Math.hypot(mx + 200, mz + 350) < 650 ? 3 : 0.4;
+    const [ccx, ccz, ccr] = city.centre;
+    const central = Math.hypot(mx - ccx, mz - ccz) < ccr ? 3 : 0.4;
     return L * central * (s.busy ? 4 : s.kind === 'main' ? 1.8 : 1);
   });
   const total = lens.reduce((a, b) => a + b, 0);

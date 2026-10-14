@@ -831,6 +831,9 @@ const city: City = {
   rails: rails.filter((r) => keepRing(r.pts)),
   trees, columns, lamps, labels,
   water: hist.water,
+  centre: hist.centre,
+  bells: hist.bells,
+  ...(spec.map ? { map: { file: spec.map.file, caption: hist.mapCaption ?? '' } } : {}),
   credits: hist.credits,
 };
 mkdirSync(`src/cities/${id}`, { recursive: true });

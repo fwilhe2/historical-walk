@@ -27,6 +27,9 @@ export interface History {
   lost: { name: string; ring: number[] }[];
   about: Record<string, string>;
   regionParks: string[];
+  centre: [number, number, number];
+  bells: { hours?: string; quarters?: string };
+  mapCaption?: string;
   shopStreets: string[];                             // streets (names of the year) whose houses had shops below                             // parks of today that were parks in the year, by name                     // HUD text for named buildings that are not modelled landmarks
 }
 

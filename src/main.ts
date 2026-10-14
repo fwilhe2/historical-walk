@@ -20,7 +20,11 @@ import { parseView, viewHash } from './app/view';
 /* ── Boot ───────────────────────────────────────────────────────
    Load the city, build its meshes, place the walker, run. */
 const bootN = document.getElementById('boot-n')!;
-const city = (await import('./cities/potsdam/city.json')).default as unknown as City;
+// The city: ?city=<id>, one of src/cities/*/city.json (built by tools/build-city.ts).
+const CITY_FILES = import.meta.glob<{ default: unknown }>('./cities/*/city.json');
+const cityId = new URLSearchParams(location.search).get('city') ?? 'potsdam';
+const load = CITY_FILES[`./cities/${cityId}/city.json`] ?? CITY_FILES['./cities/potsdam/city.json']!;
+const city = (await load()).default as City;
 const LAT = city.origin[0];
 bootN.textContent = `${city.buildings.length} buildings, ${city.streets.length} streets`;
 await new Promise((r) => setTimeout(r, 0));
@@ -169,8 +173,9 @@ function stepSound(dt: number) {
   if (q !== lastQuarter) {
     lastQuarter = q;
     const dist = (name: string) => { const l = towers[name]; return l ? Math.hypot(l.x - walker.x, l.z - walker.z) : 600; };
-    if (q % 4 === 0) { const h = Math.floor(sunState.hour) % 12 || 12; sound.bell(h, dist('Garnisonkirche'), 196); }
-    else sound.bell(q % 4, dist('St. Nikolaikirche'), 330);
+    const { hours, quarters } = city.bells;
+    if (q % 4 === 0) { if (hours) sound.bell(Math.floor(sunState.hour) % 12 || 12, dist(hours), 196); }
+    else if (quarters) sound.bell(q % 4, dist(quarters), 330);
   }
 }
 

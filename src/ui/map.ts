@@ -1,19 +1,20 @@
-import mapUrl from '../../data/potsdam/mtb1903.png?url';
 import type { City } from '../city/types';
 
+// every city's map raster, by path; the city names its own
+const MAPS = import.meta.glob<string>('../../data/*/*.png', { query: '?url', import: 'default', eager: true });
+
 /* ── The map of 1903 ────────────────────────────────────────────
-   M opens the Messtischblatt the town was checked against, centred on
+   M opens the historical map the town was checked against, centred on
    you, with an arrow for where you stand and look and the names of
    the landmarks. The wheel (or + and −) zooms; it follows you as you
    walk. The image covers the city's bounds exactly, pixel for pixel
    linear in the local frame (tools/fetch.ts). */
 const img = new Image();
-img.src = mapUrl;
 let open = false, zoom = 0.75, city: City;
 const panel = document.createElement('div');
 panel.id = 'map';
 panel.hidden = true;
-panel.innerHTML = '<canvas></canvas><div class="cap">Messtischblatt 3544/3644 · 1903 · © SBB-PK, dl-de/by-2-0 · <b>M</b> close · wheel zoom</div>';
+panel.innerHTML = '<canvas></canvas><div class="cap"></div>';
 document.body.append(panel);
 const cv = panel.querySelector('canvas')!;
 const g = cv.getContext('2d')!;
@@ -25,7 +26,12 @@ addEventListener('keydown', (e) => {
 });
 
 export const historicMap = {
-  init(c: City) { city = c; },
+  init(c: City) {
+    city = c;
+    const url = c.map ? MAPS[`../../data/${c.id}/${c.map.file}`] : undefined;
+    if (url) img.src = url;
+    panel.querySelector('.cap')!.innerHTML = `${c.map?.caption ?? ''} · <b>M</b> close · wheel zoom`;
+  },
   toggle() { open = !open; panel.hidden = !open; return open; },
   get open() { return open; },
   draw(x: number, z: number, yaw: number) {

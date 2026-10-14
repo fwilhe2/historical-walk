@@ -44,7 +44,7 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 
 ## Toward a shared engine
 
-The user may split the engine from the cities (and from ../lunar-walk) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. (Known leaks to clean when splitting: `main.ts` imports the Potsdam city.json and names the bell towers; `ui/map.ts` imports Potsdam's map raster and credits; `people.ts` weights streets by distance from a hard-coded centre.)
+The user may split the engine from the cities (and from ../lunar-walk) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. The app picks the city by `?city=<id>` (default potsdam) from `src/cities/*/city.json`; the busy centre, the bell towers and the map raster come from the city's data.
 
 ## Writing history
 

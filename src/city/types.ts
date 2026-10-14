@@ -85,6 +85,9 @@ export interface City {
   columns: Column[];
   lamps: Lamp[];
   labels: Label[];
-  water: number;                                    // the Havel's level, m (negative: below the streets)
+  water: number;                                    // the river's level, m (negative: below the streets)
+  centre: [number, number, number];                 // x, z, radius of the busy middle of town
+  bells: { hours?: string; quarters?: string };     // landmark names whose towers strike
+  map?: { file: string; caption: string };          // the historical map raster under data/<id>/
   credits: string[];
 }
