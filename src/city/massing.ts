@@ -42,7 +42,7 @@ export function roofPlanes(b: Building): { planes: Plane[]; mode: 'planes' | 'di
   const H = b.roofH;
   if (b.roof === 'flat' || H <= 0.05) return { planes: [[0, 0, 0]], mode: 'planes', H: 0, k: 0 };
   let box = b.ridge !== undefined ? fit(b.outer, b.ridge) : obb(b.outer);
-  if (box.a < box.b) box = fit(b.outer, box.ang + Math.PI / 2);
+  if (b.ridge === undefined && box.a < box.b) box = fit(b.outer, box.ang + Math.PI / 2);
   const A = box.a, B = box.b;
   const fill = Math.abs(area(b.outer)) / (4 * A * B);
   const holes = (b.holes?.length ?? 0) > 0;

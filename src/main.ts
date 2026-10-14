@@ -78,7 +78,7 @@ addEventListener('keydown', (e) => {
 /* ── Probe: a handle for tools/shot.ts ─────────────────────────── */
 const probe = new URLSearchParams(location.search).has('probe');
 const frameWaiters: (() => void)[] = [];
-declare global { interface Window { hw?: { go(hash: string): Promise<void>; frames(n: number): Promise<void> } } }
+
 if (probe) {
   overlay.classList.add('hidden');
   window.hw = {
