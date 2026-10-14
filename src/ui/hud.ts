@@ -43,14 +43,33 @@ export const hud = {
     $('hud').hidden = false;
     $('h-city').textContent = c.name.toUpperCase();
     $('h-year').textContent = String(c.year);
-    order = c.labels.filter((l) => l.kind === 'landmark');
+    order = c.labels.filter((l) => l.kind === 'landmark' && l.about);
   },
   toggleClean() { $('hud').classList.toggle('clean'); },
   refresh() { lookT = 0; },
-  nextLandmark(_x: number, _z: number) {
+  /* The next described landmark, and where to stand to see it: the
+     nearest point of a street that is not inside a building and is
+     at least the landmark's own size plus 15 m off, facing it. */
+  nextLandmark() {
     if (!order.length) return null;
     const l = order[next++ % order.length]!;
-    return l;
+    let best: [number, number] | null = null, bd = Infinity;
+    for (const s of city.streets) {
+      if (s.kind === 'path') continue;
+      const p = s.pts;
+      for (let i = 2; i < p.length; i += 2) {
+        const L = Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!), n = Math.max(1, Math.ceil(L / 4));
+        for (let k = 0; k <= n; k++) {
+          const x = p[i - 2]! + (p[i]! - p[i - 2]!) * k / n, z = p[i - 1]! + (p[i + 1]! - p[i - 1]!) * k / n;
+          const d = Math.hypot(x - l.x, z - l.z);
+          if (d < (l.r ?? 15) + 15 || d >= bd) continue;
+          if (city.buildings.some((b) => (b.base ?? 0) < 2 && inside(b.outer, x, z))) continue;
+          bd = d; best = [x, z];
+        }
+      }
+    }
+    if (!best) return null;
+    return { text: l.text, x: best[0], z: best[1], yaw: Math.atan2(-(l.x - best[0]), -(l.z - best[1])) };
   },
   update(dt: number, w: { x: number; z: number; yaw: number }, hour: number, ground: Ground) {
     if (noteT > 0 && (noteT -= dt) <= 0) $('note').textContent = '';
@@ -79,6 +98,8 @@ export const hud = {
     $('h-hdg').textContent = `${deg.toFixed(0).padStart(3, '0')}° ${dirs[Math.round(deg / 45) % 8]}`;
   },
 };
-function srcName(s: string) { return s === 'osm' ? 'standing today' : s === 'ohm' ? 'lost · OHM' : 'lost · from the 1903 map'; }
+function srcName(s: string) {
+  return s === 'osm' ? 'standing today' : s === 'ohm' ? 'lost · OHM' : s === 'model' ? 'modelled from descriptions' : 'lost · from the 1903 map';
+}
 
 export function note(t: string) { $('note').textContent = t; noteT = 3; }

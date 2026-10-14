@@ -616,7 +616,8 @@ for (const b of buildings) {
   // (and today's name of a building of the year that the history file describes)
   if (!b.name || (b.src !== 'ohm' && b.src !== 'model' && !hist.about[b.name])) continue;
   const [x, z] = centroid(b.outer);
-  const l: Label = { x: round(x), z: round(z), text: b.name, kind: 'landmark' };
+  const o = obb(b.outer);
+  const l: Label = { x: round(x), z: round(z), text: b.name, kind: 'landmark', r: round(Math.hypot(o.a, o.b)) };
   const about = abouts.get(b.name) ?? hist.about[b.name];
   if (about) l.about = about;
   labels.push(l);

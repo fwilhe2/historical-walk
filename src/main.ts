@@ -83,8 +83,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'BracketRight') sunState.hour = Math.min(21.5, sunState.hour + 0.25);
   if (e.code === 'BracketLeft') sunState.hour = Math.max(4, sunState.hour - 0.25);
   if (e.code === 'KeyG') {
-    const l = hud.nextLandmark(walker.x, walker.z);
-    if (l) { walker.x = l.x; walker.z = l.z; note(l.text); }
+    const l = hud.nextLandmark();
+    if (l) { walker.x = l.x; walker.z = l.z; walker.yaw = l.yaw; walker.pitch = 0.15; walker.fly = false; note(l.text); }
   }
 });
 

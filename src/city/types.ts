@@ -58,7 +58,7 @@ export interface Tree { x: number; z: number; h: number; r: number }
 export interface Column { x: number; z: number; r: number; h: number; base: number }
 // A gas lantern on its post, on the pavement's kerb side.
 export interface Lamp { x: number; z: number }
-export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square'; about?: string }
+export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square'; about?: string; r?: number }
 
 export interface City {
   id: string;
