@@ -20,7 +20,7 @@
    carpenter would build — meshed on refined triangles, since that
    surface is only piecewise planar along its (unknown) skeleton. */
 import earcut from 'earcut';
-import { fit, obb, area, segDist2, type Ring } from '../geom/poly';
+import { fit, obb, area, orient, segDist2, type Ring } from '../geom/poly';
 import type { Building } from './types';
 
 export interface WallBuf { pos: number[]; nrm: number[]; uv: number[]; fac: number[]; col: number[] }
@@ -292,7 +292,43 @@ export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf, withDo
   ringWalls(b, b.outer, rp, walls);
   for (const h of b.holes ?? []) ringWalls(b, h, rp, walls);
   roofFaces(b, rp, roofs, b.eave);
-  if (withDormers) dormers(b, rp, walls, roofs);
+  if (withDormers) { dormers(b, rp, walls, roofs); chimneys(b, rp, walls, roofs); }
+}
+
+/* Chimneys: one per 9 m of ridge or so, on the ridge line a little to
+   either side, plastered stacks with a flat cap, a metre above the
+   ridge. Each is a small blank building whose walls start just below
+   the roof surface. */
+function chimneys(b: Building, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf) {
+  if (rp.mode !== 'planes' || !rp.box || rp.H < 2 || (b.kind && b.kind !== 'house') || b.windows === false) return;
+  const { cx, cz, ang, A } = rp.box;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  let seed = 0;
+  for (let i = 0; i < b.id.length; i++) seed = (seed * 31 + b.id.charCodeAt(i)) >>> 0;
+  const n = Math.max(1, Math.round(2 * A / 9));
+  for (let k = 0; k < n; k++) {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    const u = -A + (2 * A) * (k + 0.5) / n + ((seed >>> 8) % 100 - 50) / 100 * 1.2;
+    const v = (((seed >>> 16) % 100) / 100 - 0.5) * 1.4;
+    const w = 0.55, d = 0.8;
+    const pts: number[] = [];
+    let lo = Infinity, hi = -Infinity;
+    for (const [du, dv] of [[-d, -w], [d, -w], [d, w], [-d, w]] as const) {
+      const x = cx + (u + du / 2) * c - (v + dv / 2) * s, z = cz + (u + du / 2) * s + (v + dv / 2) * c;
+      pts.push(x, z);
+      const y = b.eave + Math.max(0, envelope(rp.planes, x, z));
+      lo = Math.min(lo, y); hi = Math.max(hi, y);
+    }
+    if (!pts.every((_, i) => i % 2 || insideRing(b.outer, pts[i]!, pts[i + 1]!))) continue;
+    const stack: Building = {
+      id: b.id + 'c' + k, src: b.src, outer: pts, base: lo - 0.2, eave: Math.max(hi, b.eave + rp.H) + 0.9, roofH: 0, roof: 'flat',
+      storey: 3, colour: b.wall === 'brick' ? b.colour : '#8f857a', roofColour: '#5a5450', windows: false, wall: 'brick',
+    };
+    const flat = roofPlanes(stack);
+    const ring = orient(pts, true);
+    ringWalls(stack, ring, flat, walls);
+    roofFaces({ ...stack, outer: ring }, flat, roofs, stack.eave);
+  }
 }
 
 /* ── Dormers ───────────────────────────────────────────────────────
