@@ -19,6 +19,7 @@ export interface History {
   // Open squares of the year that neither OSM nor OHM outline, as
   // local-metre rings; nothing is rebuilt on them.
   squares: { name: string; ring: number[] }[];
+  canalWidth: Record<string, number>;               // m between quay walls, by OHM name
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };

@@ -13,7 +13,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
-import { area, bbox, centroid, inside, inset, obb, orient, simplify, straighten, type Ring } from '../src/geom/poly.ts';
+import { area, bbox, buffer, centroid, inside, inset, obb, orient, segDist2, simplify, straighten, type Ring } from '../src/geom/poly.ts';
 import type { Area, AreaKind, Building, City, Column, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
 import { HISTORY } from './history/index.ts';
 import { blockOutlines, loadMask, maskShare, type Mask } from './mask.ts';
@@ -234,6 +234,16 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
 for (const sq of hist.squares) areas.push({ kind: 'square', outer: orient(sq.ring, true), name: sq.name });
+// Canals that OHM has only as a line: widened to water, lined with
+// railings later (once the bridges are known).
+const canals: { left: number[]; right: number[] }[] = [];
+for (const f of ohm.feats) {
+  if (f.tags.waterway !== 'canal' || !f.line || !aliveIn(f.tags, YEAR)) continue;
+  const w = hist.canalWidth[f.tags.name ?? ''] ?? 8;
+  const b = buffer(flat(f.line), w / 2);
+  areas.push({ kind: 'water', outer: orient(b.ring, true), name: f.tags.name ?? 'Kanal' });
+  canals.push(b);
+}
 
 /* ── Lost frontage, rebuilt from the historical map's blocks ──────
    Inside the closely built town every block of the map was lined
@@ -339,8 +349,46 @@ function addStreets(fs: Feature[], hist1900: boolean) {
     streets.push(s);
   }
 }
-addStreets(osm.feats, false);
 addStreets(ohm.feats, true);
+const ohmBridges = streets.filter((s) => s.kind === 'bridge' || s.kind === 'footbridge');
+const nOhm = streets.length;
+addStreets(osm.feats, false);
+/* Today's streets are the town's streets of 1900 except where the
+   post-war town cut new roads through old blocks or over new bridges:
+   a street running mostly over the 1903 map's built blocks is one of
+   those, and so is a bridge with no bridge of the year near it. */
+const streetStats = { dropped: 0, bridgesDropped: 0, bridgesAdded: 0 };
+for (let i = streets.length - 1; i >= nOhm; i--) {
+  const st = streets[i]!;
+  if (st.kind === 'bridge' || st.kind === 'footbridge') {
+    const [mx, mz] = midpoint(st.pts);
+    if (!ohmBridges.some((o) => nearLine(o.pts, mx, mz, 25))) { streets.splice(i, 1); streetStats.bridgesDropped++; }
+    continue;
+  }
+  if (mask && st.kind !== 'path' && builtShare(st.pts) > 0.45) { streets.splice(i, 1); streetStats.dropped++; }
+}
+function midpoint(p: number[]): [number, number] {
+  let L = 0;
+  for (let i = 2; i < p.length; i += 2) L += Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!);
+  let acc = 0;
+  for (let i = 2; i < p.length; i += 2) {
+    const l = Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!);
+    if (acc + l >= L / 2) { const t = (L / 2 - acc) / (l || 1); return [p[i - 2]! + (p[i]! - p[i - 2]!) * t, p[i - 1]! + (p[i + 1]! - p[i - 1]!) * t]; }
+    acc += l;
+  }
+  return [p[0]!, p[1]!];
+}
+function builtShare(p: number[]) {
+  let n = 0, k = 0;
+  for (let i = 2; i < p.length; i += 2) {
+    const L = Math.hypot(p[i]! - p[i - 2]!, p[i + 1]! - p[i - 1]!), m = Math.max(1, Math.ceil(L / 3));
+    for (let j = 0; j < m; j++) {
+      const x = p[i - 2]! + (p[i]! - p[i - 2]!) * (j + 0.5) / m, z = p[i - 1]! + (p[i + 1]! - p[i - 1]!) * (j + 0.5) / m;
+      n++; if (mask!.at(x, z)) k++;
+    }
+  }
+  return n ? k / n : 0;
+}
 
 /* ── Walls, rails, trees ─────────────────────────────────────── */
 const walls: Wall[] = [];
@@ -348,6 +396,55 @@ for (const f of ohm.feats) {
   if (!f.line || !aliveIn(f.tags, YEAR)) continue;
   if (f.tags.barrier === 'city_wall') walls.push({ pts: flat(f.line), h: 4.2, t: 0.8, kind: 'city' });
   else if (f.tags.barrier === 'wall') walls.push({ pts: flat(f.line), h: 2.4, t: 0.5, kind: 'garden' });
+}
+// Every street that crosses a canal does so on a bridge: where no
+// bridge of the year is mapped at a crossing, one is laid there.
+for (const c of canals) {
+  const mid: number[] = [];
+  for (let i = 0; i < c.left.length; i += 2) mid.push((c.left[i]! + c.right[i]!) / 2, (c.left[i + 1]! + c.right[i + 1]!) / 2);
+  const cw = Math.hypot(c.left[0]! - c.right[0]!, c.left[1]! - c.right[1]!);
+  for (const st of streets.slice()) {
+    if (st.kind === 'bridge' || st.kind === 'footbridge') continue;
+    const p = st.pts;
+    for (let i = 2; i < p.length; i += 2) for (let j = 2; j < mid.length; j += 2) {
+      const hit = cross(p[i - 2]!, p[i - 1]!, p[i]!, p[i + 1]!, mid[j - 2]!, mid[j - 1]!, mid[j]!, mid[j + 1]!);
+      if (!hit) continue;
+      if (ohmBridges.some((o) => nearLine(o.pts, hit[0], hit[1], 15))) continue;
+      const dx = p[i]! - p[i - 2]!, dz = p[i + 1]! - p[i - 1]!, L = Math.hypot(dx, dz) || 1, h = cw / 2 + 2.5;
+      streets.push({ kind: st.kind === 'path' ? 'footbridge' : 'bridge', w: Math.min(st.w, 12), name: st.name ?? 'Brücke',
+        pts: [hit[0] - dx / L * h, hit[1] - dz / L * h, hit[0] + dx / L * h, hit[1] + dz / L * h].map(round), paving: st.paving } as Street);
+      streetStats.bridgesAdded++;
+    }
+  }
+}
+function cross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): [number, number] | null {
+  const r = (bx - ax) * (dz - cz) - (bz - az) * (dx - cx);
+  if (Math.abs(r) < 1e-9) return null;
+  const t = ((cx - ax) * (dz - cz) - (cz - az) * (dx - cx)) / r, u = ((cx - ax) * (bz - az) - (cz - az) * (bx - ax)) / r;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [ax + (bx - ax) * t, az + (bz - az) * t] : null;
+}
+// Railings along the canals, broken where a street crosses on a bridge.
+for (const c of canals) {
+  for (const side of [c.left, c.right]) {
+    let run: number[] = [];
+    const flush = () => { if (run.length >= 4) walls.push({ pts: run.map(round), h: 1.05, t: 0.08, kind: 'railing' }); run = []; };
+    // walk the side in steps of about 2 m so breaks fall close to the bridge
+    for (let i = 2; i < side.length; i += 2) {
+      const ax = side[i - 2]!, az = side[i - 1]!, bx = side[i]!, bz = side[i + 1]!;
+      const L = Math.hypot(bx - ax, bz - az), k = Math.max(1, Math.ceil(L / 2));
+      for (let j = 0; j <= k; j++) {
+        if (j === 0 && run.length) continue;
+        const x = ax + (bx - ax) * j / k, z = az + (bz - az) * j / k;
+        const onBridge = streets.some((s) => (s.kind === 'bridge' || s.kind === 'footbridge') && nearLine(s.pts, x, z, s.w / 2 + 0.5));
+        if (onBridge) flush(); else run.push(x, z);
+      }
+    }
+    flush();
+  }
+}
+function nearLine(p: number[], x: number, z: number, d: number) {
+  for (let i = 2; i < p.length; i += 2) if (segDist2(x, z, p[i - 2]!, p[i - 1]!, p[i]!, p[i + 1]!) < d * d) return true;
+  return false;
 }
 const rails: Rail[] = [];
 for (const f of ohm.feats) {
@@ -394,4 +491,4 @@ const city: City = {
 };
 mkdirSync(`src/cities/${id}`, { recursive: true });
 writeFileSync(`src/cities/${id}/city.json`, JSON.stringify(city));
-console.log(stats, { buildings: buildings.length, areas: city.areas.length, streets: city.streets.length, walls: city.walls.length, rails: city.rails.length, trees: trees.length });
+console.log(stats, streetStats, { buildings: buildings.length, areas: city.areas.length, streets: city.streets.length, walls: city.walls.length, rails: city.rails.length, trees: trees.length });

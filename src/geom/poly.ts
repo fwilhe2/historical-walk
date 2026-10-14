@@ -170,3 +170,29 @@ export function straighten(r: Ring, minTurn: number, maxShift: number): Ring {
   }
   return o;
 }
+
+/* A polyline widened to a ring of half-width w, with mitred joins
+   (capped at 2w) and square ends. Also returns the two offset sides,
+   left then right, for quays and railings. */
+export function buffer(line: number[], w: number): { ring: Ring; left: number[]; right: number[] } {
+  const n = line.length / 2;
+  const left: number[] = [], right: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = line[2 * i]!, z = line[2 * i + 1]!;
+    const p = Math.max(0, i - 1), q = Math.min(n - 1, i + 1);
+    let ax = x - line[2 * p]!, az = z - line[2 * p + 1]!, bx = line[2 * q]! - x, bz = line[2 * q + 1]! - z;
+    const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
+    if (la > 0) { ax /= la; az /= la; } else { ax = bx / (lb || 1); az = bz / (lb || 1); }
+    if (lb > 0) { bx /= lb; bz /= lb; } else { bx = ax; bz = az; }
+    // left normal of the mean direction
+    let nx = -(az + bz), nz = ax + bx;
+    const nl = Math.hypot(nx, nz) || 1;
+    nx /= nl; nz /= nl;
+    const cosHalf = Math.max(0.5, nx * -az + nz * ax);
+    left.push(x + nx * w / cosHalf, z + nz * w / cosHalf);
+    right.push(x - nx * w / cosHalf, z - nz * w / cosHalf);
+  }
+  const ring: Ring = [...left];
+  for (let i = n - 1; i >= 0; i--) ring.push(right[2 * i]!, right[2 * i + 1]!);
+  return { ring, left, right };
+}

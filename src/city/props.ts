@@ -58,28 +58,59 @@ export function buildTrees(city: City) {
 }
 
 export function buildWalls(city: City) {
+  const group = new THREE.Group();
+  group.name = 'walls';
+  const solid = city.walls.filter((w) => w.kind !== 'railing'), rails = city.walls.filter((w) => w.kind === 'railing');
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.95, side: THREE.DoubleSide });
+  const walls = new THREE.Mesh(wallGeometry(solid, true), mat);
+  walls.castShadow = walls.receiveShadow = true;
+  // Railings: one thin sheet each, its bars cut out of it in the shader
+  // (balusters every 12 cm, a top and a bottom rail, a post every 2 m).
+  const rmat = new THREE.MeshStandardMaterial({ color: 0x1d1f20, roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide, alphaTest: 0.5 });
+  rmat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vR;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvR = uv;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vR;')
+      .replace('#include <alphatest_fragment>', `
+        float bar = step(abs(fract(vR.x / 0.12) - 0.5), 0.12);
+        float post = step(abs(fract(vR.x / 2.0) - 0.5), 0.022);
+        float railT = step(abs(vR.y - 0.98), 0.05), railB = step(abs(vR.y - 0.12), 0.035);
+        float a = max(max(bar, post), max(railT, railB));
+        if (a < 0.5) discard;
+      `);
+  };
+  rmat.customProgramCacheKey = () => 'railing';
+  const railing = new THREE.Mesh(wallGeometry(rails, false), rmat);
+  railing.castShadow = true;
+  group.add(walls, railing);
+  return group;
+}
+
+/* Boxes along wall lines (thick: with a top), or single sheets. */
+function wallGeometry(list: City['walls'], thick: boolean) {
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], n: number[], u0: number, u1: number) => {
-    for (const [p, u] of [[a, [u0, a[1]!]], [b, [u1, b[1]!]], [c, [u1, c[1]!]], [a, [u0, a[1]!]], [c, [u1, c[1]!]], [d, [u0, d[1]!]]] as [number[], number[]][]) {
+    for (const [p, u] of [[a, [u0, a[1]!]], [b, [u0, b[1]!]], [c, [u1, c[1]!]], [a, [u0, a[1]!]], [c, [u1, c[1]!]], [d, [u1, d[1]!]]] as [number[], number[]][]) {
       pos.push(p[0]!, p[1]!, p[2]!); nrm.push(n[0]!, n[1]!, n[2]!); uv.push(u[0]!, u[1]!);
     }
   };
-  for (const w of city.walls) {
-    const r = w.pts, h = w.h, t = w.t / 2;
+  for (const w of list) {
+    const r = w.pts, h = w.h, t = thick ? w.t / 2 : 0;
     let u = 0;
     for (let i = 2; i < r.length; i += 2) {
       const ax = r[i - 2]!, az = r[i - 1]!, bx = r[i]!, bz = r[i + 1]!;
       const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
       if (L < 0.01) continue;
-      const nx = dz / L * t, nz = -dx / L * t;
-      // extend each piece by half the thickness so corners close
+      const nx = dz / L, nz = -dx / L;
       const ex = dx / L * t, ez = dz / L * t;
       const A = [ax - ex, az - ez], B = [bx + ex, bz + ez];
-      const L1 = [A[0]! + nx, A[1]! + nz], L2 = [B[0]! + nx, B[1]! + nz], R1 = [A[0]! - nx, A[1]! - nz], R2 = [B[0]! - nx, B[1]! - nz];
-      const n1 = [nx / t, 0, nz / t], n2 = [-nx / t, 0, -nz / t];
-      quad([L1[0]!, 0, L1[1]!], [L1[0]!, h, L1[1]!], [L2[0]!, h, L2[1]!], [L2[0]!, 0, L2[1]!], n1, u, u + L);
-      quad([R2[0]!, 0, R2[1]!], [R2[0]!, h, R2[1]!], [R1[0]!, h, R1[1]!], [R1[0]!, 0, R1[1]!], n2, u + L, u);
-      quad([L1[0]!, h, L1[1]!], [R1[0]!, h, R1[1]!], [R2[0]!, h, R2[1]!], [L2[0]!, h, L2[1]!], [0, 1, 0], u, u + L);
+      const L1 = [A[0]! + nx * t, A[1]! + nz * t], L2 = [B[0]! + nx * t, B[1]! + nz * t];
+      const R1 = [A[0]! - nx * t, A[1]! - nz * t], R2 = [B[0]! - nx * t, B[1]! - nz * t];
+      quad([L1[0]!, 0, L1[1]!], [L1[0]!, h, L1[1]!], [L2[0]!, h, L2[1]!], [L2[0]!, 0, L2[1]!], [nx, 0, nz], u, u + L);
+      if (thick) {
+        quad([R2[0]!, 0, R2[1]!], [R2[0]!, h, R2[1]!], [R1[0]!, h, R1[1]!], [R1[0]!, 0, R1[1]!], [-nx, 0, -nz], u + L, u);
+        quad([L1[0]!, h, L1[1]!], [R1[0]!, h, R1[1]!], [R2[0]!, h, R2[1]!], [L2[0]!, h, L2[1]!], [0, 1, 0], u, u + L);
+      }
       u += L;
     }
   }
@@ -87,11 +118,7 @@ export function buildWalls(city: City) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.95, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(g, mat);
-  mesh.castShadow = mesh.receiveShadow = true;
-  mesh.name = 'walls';
-  return mesh;
+  return g;
 }
 
 /* Columns: an instanced shaft, plinth and capital each, in sandstone. */

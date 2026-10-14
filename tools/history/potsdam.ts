@@ -25,6 +25,11 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  // The Stadtkanal (1722, walled in sandstone with an iron railing
+  // under Frederick II, filled 1962–65): 1.84 km, nine bridges. No
+  // source found gives its width; about 9 m between the walls is an
+  // estimate from the reopened stretch on the Yorckstraße.
+  canalWidth: { Stadtkanal: 9 },
   squares: [
     // Between St. Nikolai's portico, the Schloss's north front with the
     // Fortunaportal, the Rathaus and the corner of the colonnade; the
