@@ -15,7 +15,8 @@ bun run dev        # http://localhost:5173
 Click to walk. **WASD** walk, **Shift** walk briskly, mouse looks.
 **F** flies over the roofs (**Space**/**C** up and down), **M** opens the
 Messtischblatt of 1903 at your position, **[ ]** move the sun through
-the day, **G** steps through the landmarks, **N** mutes the sound, **H**
+the day, **G** steps through the landmarks, **V** tints every building by
+its source, **N** mutes the sound, **H**
 hides the HUD. Time runs at the clock's pace: the Garnisonkirche strikes
 the hours, St. Nikolai the quarters. The URL hash always holds your
 position, so a view can be shared.

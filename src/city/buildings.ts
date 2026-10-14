@@ -18,8 +18,11 @@ const TILE = 200;
 
 // 0 by day, 1 at night: lights in a share of the windows (main.ts sets it).
 export const nightLight = { value: 0 };
+// 1 tints every wall by where it came from (V).
+export const sourceView = { value: 0 };
 const FACADE_PARS = /* glsl */ `
 uniform float uNight;
+uniform float uSrcView;
 varying vec4 vFac;
 varying vec2 vWall;
 varying vec3 vWP;
@@ -43,7 +46,8 @@ function facadeMaterial() {
       .replace('#include <map_fragment>', /* glsl */ `
         float u = vWall.x, y = vWall.y;
         float eave = vFac.x, storey = vFac.y, L = vFac.z;
-        float flags = floor(vFac.w), seed = fract(vFac.w);
+        float flags = mod(floor(vFac.w), 128.0), seed = fract(vFac.w);
+        float src = floor(floor(vFac.w) / 128.0);
         bool blank = mod(flags, 2.0) >= 1.0;
         bool church = mod(floor(flags / 2.0), 2.0) >= 1.0;
         bool grand = mod(floor(flags / 4.0), 2.0) >= 1.0;
@@ -189,11 +193,17 @@ function facadeMaterial() {
             litWin = inner * (1.0 - bars) * on;
           }
         }
+        if (uSrcView > 0.5) {
+          // green: standing today; blue: lost, OHM; orange: rebuilt from the 1903 map; violet: modelled
+          vec3 sc = src < 0.5 ? vec3(0.15, 0.5, 0.15) : src < 1.5 ? vec3(0.1, 0.3, 0.85) : src < 2.5 ? vec3(0.95, 0.45, 0.05) : vec3(0.65, 0.2, 0.8);
+          col = mix(col, sc, 0.85);
+        }
         diffuseColor.rgb = col;
       `)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rough;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.6, 0.28) * litWin * uNight * 1.4;');
     sh.uniforms.uNight = nightLight;
+    sh.uniforms.uSrcView = sourceView;
   };
   m.customProgramCacheKey = () => 'facade';
   return m;
@@ -203,10 +213,10 @@ function roofMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vRoof;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoof = uv;');
+      .replace('#include <common>', '#include <common>\nattribute float aSrc;\nvarying vec2 vRoof;\nvarying float vSrc;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvRoof = uv; vSrc = aSrc;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vRoof;\nfloat rHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }')
+      .replace('#include <common>', '#include <common>\nuniform float uSrcView;\nvarying vec2 vRoof;\nvarying float vSrc;\nfloat rHash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }')
       .replace('#include <map_fragment>', /* glsl */ `
         // rows of tiles up the slope, each tile a little different
         float rowH = 0.19, tw = 0.18;
@@ -221,7 +231,12 @@ function roofMaterial() {
         float far = smoothstep(0.25, 0.6, aa);
         float v = mix(shade * gap * (0.86 + 0.24 * rHash(vec2(t, row))), 0.88, far);
         diffuseColor.rgb *= v;
+        if (uSrcView > 0.5) {
+          vec3 sc = vSrc < 0.5 ? vec3(0.15, 0.5, 0.15) : vSrc < 1.5 ? vec3(0.1, 0.3, 0.85) : vSrc < 2.5 ? vec3(0.95, 0.45, 0.05) : vec3(0.65, 0.2, 0.8);
+          diffuseColor.rgb = mix(diffuseColor.rgb, sc, 0.85);
+        }
       `);
+    sh.uniforms.uSrcView = sourceView;
   };
   m.customProgramCacheKey = () => 'roof';
   return m;
@@ -246,6 +261,7 @@ function roofGeometry(r: RoofBuf) {
   g.setAttribute('normal', new THREE.Float32BufferAttribute(r.nrm, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(r.uv, 2));
   g.setAttribute('color', new THREE.Float32BufferAttribute(r.col, 3));
+  g.setAttribute('aSrc', new THREE.Float32BufferAttribute(r.src, 1));
   g.computeBoundingSphere();
   return g;
 }

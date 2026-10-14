@@ -24,11 +24,12 @@ import { fit, obb, area, orient, segDist2, type Ring } from '../geom/poly';
 import type { Building } from './types';
 
 export interface WallBuf { pos: number[]; nrm: number[]; uv: number[]; fac: number[]; col: number[] }
-export interface RoofBuf { pos: number[]; nrm: number[]; uv: number[]; col: number[] }
+export interface RoofBuf { pos: number[]; nrm: number[]; uv: number[]; col: number[]; src: number[]; cur: number }
 export const wallBuf = (): WallBuf => ({ pos: [], nrm: [], uv: [], fac: [], col: [] });
-export const roofBuf = (): RoofBuf => ({ pos: [], nrm: [], uv: [], col: [] });
+export const roofBuf = (): RoofBuf => ({ pos: [], nrm: [], uv: [], col: [], src: [], cur: 0 });
 
 type Plane = [number, number, number];   // c, gx, gz
+const SRC_CODE = { osm: 0, ohm: 1, mtb: 2, model: 3 } as const;
 
 export function hexRGB(hex: string): [number, number, number] {
   const v = parseInt(hex.slice(1), 16);
@@ -157,6 +158,7 @@ function pushTri(buf: RoofBuf, p: number[], nx: number, ny: number, nz: number, 
     buf.nrm.push(nx, ny, nz);
     buf.uv.push(uv[2 * k]!, uv[2 * k + 1]!);
     buf.col.push(col[0], col[1], col[2]);
+    buf.src.push(buf.cur);
   }
 }
 
@@ -242,10 +244,10 @@ function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
   const n = r.length;
   const base = b.base ?? 0;
   const col = hexRGB(b.colour);
-  // flags: 1 blank, 2 church, 4 grand; 8 × wall style (0 plaster, 1 brick, 2 stone, 3 copper, 4 dormer); 64 ornate
+  // flags: 1 blank, 2 church, 4 grand; 8 × wall style (0 plaster, 1 brick, 2 stone, 3 copper, 4 dormer); 64 ornate; 128 × source
   const style = b.wall === 'brick' ? 1 : b.wall === 'stone' ? 2 : b.wall === 'copper' ? 3 : 0;
   const flags = (b.windows === false ? 1 : 0) + (b.kind === 'church' ? 2 : b.kind === 'palace' || b.kind === 'public' ? 4 : 0) + 8 * style
-    + (b.ornate || b.kind === 'palace' ? 64 : 0);
+    + (b.ornate || b.kind === 'palace' ? 64 : 0) + 128 * SRC_CODE[b.src];
   const seed = (parseInt(b.id.replace(/\D/g, '').slice(-6) || '0', 10) % 997) / 997;
   for (let i = 0; i < n; i += 2) {
     const j = (i + 2) % n;
@@ -290,6 +292,7 @@ function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
 
 export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf, withDormers = true) {
   const rp = roofPlanes(b);
+  roofs.cur = SRC_CODE[b.src];
   ringWalls(b, b.outer, rp, walls);
   for (const h of b.holes ?? []) ringWalls(b, h, rp, walls);
   roofFaces(b, rp, roofs, b.eave);
@@ -371,7 +374,7 @@ function dormers(b: Building, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf) {
       const [nx, nz] = [-s * sg, c * sg];   // outward
       // front wall and its gable
       const fl = P(-DW / 2, 0, y0), fr = P(DW / 2, 0, y0), tl = P(-DW / 2, 0, y1), tr = P(DW / 2, 0, y1), tg = P(0, 0, yr);
-      const fac = [y1, y0, DW, 32 + (b.windows === false ? 1 : 0)];
+      const fac = [y1, y0, DW, 32 + (b.windows === false ? 1 : 0) + 128 * SRC_CODE[b.src]];
       const wtri = (a: number[], bb: number[], cc: number[], ua: number[], ub: number[], uc: number[], nn: number[]) => {
         const e1 = [bb[0]! - a[0]!, bb[1]! - a[1]!, bb[2]! - a[2]!], e2 = [cc[0]! - a[0]!, cc[1]! - a[1]!, cc[2]! - a[2]!];
         const cr = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { buildBuildings, nightLight } from './city/buildings';
+import { buildBuildings, nightLight, sourceView } from './city/buildings';
 import { buildGround } from './city/ground';
 import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
@@ -79,6 +79,10 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') { walker.fly = !walker.fly; if (walker.fly) walker.flyY = Math.max(walker.flyY, 40); note(walker.fly ? 'FLYING' : 'WALKING'); }
   if (e.code === 'KeyH') hud.toggleClean();
   if (e.code === 'KeyM') historicMap.toggle();
+  if (e.code === 'KeyV') {
+    sourceView.value = 1 - sourceView.value;
+    note(sourceView.value ? 'GREEN STANDS TODAY · BLUE LOST (OHM) · ORANGE REBUILT FROM THE 1903 MAP · VIOLET MODELLED' : 'SOURCES OFF');
+  }
   if (e.code === 'KeyN') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   if (e.code === 'BracketRight') sunState.hour = Math.min(21.5, sunState.hour + 0.25);
   if (e.code === 'BracketLeft') sunState.hour = Math.max(4, sunState.hour - 0.25);
