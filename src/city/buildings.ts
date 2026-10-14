@@ -22,6 +22,8 @@ const FACADE_PARS = /* glsl */ `
 uniform float uNight;
 varying vec4 vFac;
 varying vec2 vWall;
+varying vec3 vWP;
+varying vec3 vWN;
 float fHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 // 1 inside the box [a, b] with a soft edge of w
 float fBox(vec2 p, vec2 a, vec2 b, float w) {
@@ -34,8 +36,8 @@ function facadeMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aFac;\nvarying vec4 vFac;\nvarying vec2 vWall;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvFac = aFac; vWall = uv;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aFac;\nvarying vec4 vFac;\nvarying vec2 vWall;\nvarying vec3 vWP;\nvarying vec3 vWN;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvFac = aFac; vWall = uv; vWP = (modelMatrix * vec4(position, 1.0)).xyz; vWN = normal;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + FACADE_PARS)
       .replace('#include <map_fragment>', /* glsl */ `
@@ -111,6 +113,13 @@ function facadeMaterial() {
           col = mix(col, mix(vec3(0.04, 0.045, 0.055), frameC, bars), inner);
           rough = mix(rough, 0.1, inner * (1.0 - bars));
         }
+        // Reveals: windows and doors sit 25 cm into the wall. The glass is
+        // drawn where the eye ray meets the plane 25 cm behind the facade,
+        // so the opening's inner side shows on the side away from you.
+        vec3 Vw = normalize(vWP - cameraPosition);
+        vec3 Tw = normalize(vec3(-vWN.z, 0.0, vWN.x));
+        float vn = max(0.2, -dot(Vw, vWN));
+        vec2 par = vec2(dot(Vw, Tw), Vw.y) / vn * 0.25;
         // window bays
         float bay = church ? 5.5 : grand ? 4.0 : mix(2.9, 3.5, seed);
         float nb = max(1.0, floor(L / bay));
@@ -133,7 +142,9 @@ function facadeMaterial() {
           vec2 a = door ? vec2(-0.75, -0.6) : vec2(-ww * 0.5, wy0);
           vec2 b = door ? vec2(0.75, 2.75) : vec2(ww * 0.5, wy0 + wh);
           float outer = fBox(p, a - frame, b + frame, aa);
-          float inner = fBox(p, a, b, aa);
+          float opening = fBox(p, a, b, aa);
+          float inner = opening * fBox(p + par, a, b, aa);
+          float reveal = opening - inner;
           // arched heads on churches
           if (church) {
             float r = ww * 0.5;
@@ -144,6 +155,7 @@ function facadeMaterial() {
           }
           vec3 frameC = mix(plaster * 1.15, vec3(0.86, 0.84, 0.8), 0.6);
           col = mix(col, frameC, outer);
+          col = mix(col, plaster * 0.55, reveal);
           // the sill below
           float sill = fBox(p, vec2(a.x - 0.18, a.y - 0.2), vec2(b.x + 0.18, a.y - 0.08), aa);
           col = mix(col, plaster * 0.8, sill * (door ? 0.0 : 1.0));
