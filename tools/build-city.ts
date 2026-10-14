@@ -357,7 +357,25 @@ addStreets(osm.feats, false);
    post-war town cut new roads through old blocks or over new bridges:
    a street running mostly over the 1903 map's built blocks is one of
    those, and so is a bridge with no bridge of the year near it. */
-const streetStats = { dropped: 0, bridgesDropped: 0, bridgesAdded: 0 };
+const streetStats = { dropped: 0, bridgesDropped: 0, bridgesAdded: 0, renamed: 0 };
+/* Names of the year: an OSM street takes the name of an OHM street of
+   1900 that runs along it (most of its length within 12 m), else a
+   rename from the history file, else today's name. */
+const ohmNamed = streets.slice(0, nOhm).filter((o) => o.name);
+for (let i = nOhm; i < streets.length; i++) {
+  const st = streets[i]!;
+  let best = '', bestShare = 0.6;
+  for (const o of ohmNamed) {
+    let n = 0, k = 0;
+    const p = st.pts;
+    for (let j = 0; j < p.length; j += 2) { n++; if (nearLine(o.pts, p[j]!, p[j + 1]!, 12)) k++; }
+    if (n && k / n > bestShare) { bestShare = k / n; best = o.name!; }
+  }
+  const before = st.name;
+  if (best) st.name = best;
+  else if (st.name && hist.rename[st.name]) st.name = hist.rename[st.name];
+  if (st.name !== before) streetStats.renamed++;
+}
 for (let i = streets.length - 1; i >= nOhm; i--) {
   const st = streets[i]!;
   if (st.kind === 'bridge' || st.kind === 'footbridge') {

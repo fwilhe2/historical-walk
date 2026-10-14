@@ -20,6 +20,7 @@ export interface History {
   // local-metre rings; nothing is rebuilt on them.
   squares: { name: string; ring: number[] }[];
   canalWidth: Record<string, number>;               // m between quay walls, by OHM name
+  rename: Record<string, string>;                    // today's street name → the year's, where OHM has none
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };

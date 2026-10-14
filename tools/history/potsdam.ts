@@ -25,6 +25,18 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  // Where no OHM street of 1900 lies along today's, these renamings
+  // (post-1918 and post-1945 names back to the old ones) apply. Only
+  // certain ones; the rest keep today's name rather than a guess.
+  rename: {
+    'Am Alten Markt': 'Alter Markt',
+    'Am Neuen Markt': 'Neuer Markt',
+    'Platz der Einheit': 'Wilhelmplatz',
+    'Henning-von-Tresckow-Straße': 'Priesterstraße',
+    'Zeppelinstraße': 'Neue Königstraße',
+    'Friedrich-Ebert-Straße': 'Nauener Straße',
+    'Dortustraße': 'Junkerstraße',
+  },
   // The Stadtkanal (1722, walled in sandstone with an iron railing
   // under Frederick II, filled 1962–65): 1.84 km, nine bridges. No
   // source found gives its width; about 9 m between the walls is an
