@@ -6,8 +6,7 @@ import type { City } from './types';
    Barges (Kähne) and a small steamer on the river within the town's
    bounds. Each keeps to open water by feeling ahead: when the water
    ends 25 m before its bow it turns toward whichever side stays wet
-   longer, so they wander up and down the Havel and the Alte Fahrt.
-   The steamer trails a little smoke. */
+   longer, so they wander up and down the Havel and the Alte Fahrt. */
 
 interface Boat { x: number; z: number; yaw: number; v: number; obj: THREE.Group }
 
