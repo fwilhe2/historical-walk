@@ -1,0 +1,114 @@
+/* Download the raw map data for a city and keep only what the walk
+   draws. Run once (bun run fetch potsdam); the reduced files under
+   data/<city>/ are committed, so building the city never needs the
+   network.
+
+   - OpenStreetMap, today's map, from the editing API's /map call in
+     tiles (Overpass is often too busy for a whole old town at once).
+     Most of the old buildings in the baroque extension still stand
+     and are mapped here, footprint by footprint.
+   - OpenHistoricalMap, the same data model with start_date/end_date
+     on every feature: the lost buildings (Stadtschloss,
+     Garnisonkirche, …) and old streets and water. CC0.
+
+   Usage: node tools/fetch.ts <city> */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { CITIES } from './cities.ts';
+
+const UA = 'historical-walk/0.1 (https://github.com/fwilhe2/historical-walk)';
+type Tags = Record<string, string>;
+interface RawNode { type: 'node'; id: number; lat: number; lon: number; tags?: Tags }
+interface RawWay { type: 'way'; id: number; nodes: number[]; tags?: Tags }
+interface RawRel { type: 'relation'; id: number; members: { type: string; ref: number; role: string }[]; tags?: Tags }
+type Raw = RawNode | RawWay | RawRel;
+
+// What a feature must carry to be kept. Nodes are kept when a kept
+// way uses them, or when they are a point feature themselves.
+const AREA_KEYS = ['building', 'building:part', 'highway', 'waterway', 'natural', 'landuse', 'leisure', 'amenity',
+  'railway', 'barrier', 'man_made', 'bridge', 'area:highway', 'place', 'historic', 'tourism', 'water'];
+const POINT_KEYS = ['natural', 'historic', 'amenity', 'tourism', 'man_made', 'highway'];
+const keepWay = (t?: Tags) => !!t && AREA_KEYS.some((k) => k in t);
+const keepPoint = (t?: Tags) => !!t && POINT_KEYS.some((k) => k in t);
+
+async function get(url: string, init?: RequestInit, tries = 6): Promise<string> {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url, { ...init, headers: { 'User-Agent': UA, ...(init?.headers ?? {}) } });
+      const body = await r.text();
+      if (r.ok && body.trimStart().startsWith('{')) return body;
+      throw new Error(`${r.status} ${body.slice(0, 200)}`);
+    } catch (e) {
+      if (i >= tries) throw e;
+      console.warn(`  retry ${i + 1}: ${(e as Error).message.slice(0, 120)}`);
+      await new Promise((ok) => setTimeout(ok, 5000 * (i + 1)));
+    }
+  }
+}
+
+function reduce(all: Map<string, Raw>) {
+  const nodes = new Map<number, RawNode>(), ways = new Map<number, RawWay>(), rels = new Map<number, RawRel>();
+  for (const e of all.values()) {
+    if (e.type === 'node') nodes.set(e.id, e);
+    else if (e.type === 'way') ways.set(e.id, e);
+    else rels.set(e.id, e);
+  }
+  const keptRels = [...rels.values()].filter((r) => keepWay(r.tags));
+  const wayIds = new Set<number>();
+  for (const w of ways.values()) if (keepWay(w.tags)) wayIds.add(w.id);
+  for (const r of keptRels) for (const m of r.members) if (m.type === 'way' && ways.has(m.ref)) wayIds.add(m.ref);
+  const keptWays = [...wayIds].map((id) => ways.get(id)!);
+  const nodeIds = new Set<number>();
+  for (const w of keptWays) for (const n of w.nodes) nodeIds.add(n);
+  for (const n of nodes.values()) if (keepPoint(n.tags)) nodeIds.add(n.id);
+  const out = {
+    // [lat, lon] to 7 places (about a centimetre), tags only where there are any.
+    nodes: Object.fromEntries([...nodeIds].filter((id) => nodes.has(id)).map((id) => {
+      const n = nodes.get(id)!;
+      const v: (number | Tags)[] = [+n.lat.toFixed(7), +n.lon.toFixed(7)];
+      if (n.tags) v.push(n.tags);
+      return [id, v];
+    })),
+    ways: keptWays.map((w) => ({ id: w.id, nodes: w.nodes, tags: w.tags ?? {} })),
+    relations: keptRels.map((r) => ({ id: r.id, members: r.members.filter((m) => m.type === 'way').map((m) => [m.ref, m.role]), tags: r.tags ?? {} })),
+  };
+  return out;
+}
+
+async function osm(bbox: [number, number, number, number], step: number) {
+  const [s, w, n, e] = bbox;
+  const all = new Map<string, Raw>();
+  for (let lat = s; lat < n - 1e-9; lat += step) {
+    for (let lon = w; lon < e - 1e-9; lon += step) {
+      const b = [lon, lat, Math.min(lon + step, e), Math.min(lat + step, n)].map((v) => v.toFixed(5)).join(',');
+      console.log(`osm tile ${b}`);
+      const j = JSON.parse(await get(`https://api.openstreetmap.org/api/0.6/map.json?bbox=${b}`)) as { elements: Raw[] };
+      for (const el of j.elements) all.set(el.type + el.id, el);
+    }
+  }
+  // Ways crossing a tile edge are complete (the API returns all their
+  // nodes); relations may miss members outside the bbox, which only
+  // matters for features we would clip anyway.
+  return reduce(all);
+}
+
+async function ohm(bbox: [number, number, number, number]) {
+  const b = bbox.join(',');
+  const q = `[out:json][timeout:170];(nwr(${b});<;>;);out body;`;
+  console.log('ohm overpass');
+  const j = JSON.parse(await get('https://overpass-api.openhistoricalmap.org/api/interpreter', {
+    method: 'POST', body: new URLSearchParams({ data: q }),
+  })) as { elements: Raw[] };
+  const all = new Map<string, Raw>();
+  for (const el of j.elements) all.set(el.type + el.id, el);
+  return reduce(all);
+}
+
+const id = process.argv[2] ?? 'potsdam';
+const city = CITIES[id];
+if (!city) throw new Error(`unknown city ${id}; known: ${Object.keys(CITIES).join(', ')}`);
+const dir = `data/${id}`;
+mkdirSync(dir, { recursive: true });
+const which = process.argv[3];
+if (!which || which === 'osm') writeFileSync(`${dir}/osm.json`, JSON.stringify(await osm(city.bbox, 0.006)));
+if (!which || which === 'ohm') writeFileSync(`${dir}/ohm.json`, JSON.stringify(await ohm(city.bbox)));
+console.log('done');

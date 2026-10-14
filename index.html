@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historical Walk</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+
+<div id="boot"><div class="t">Potsdam 1900</div><div class="n" id="boot-n">building the town…</div></div>
+
+<div id="hud" hidden>
+  <div id="crosshair"></div>
+  <div id="place" class="plate">
+    <div class="city"><span id="h-city">POTSDAM</span><span class="chip" id="h-year">1900</span></div>
+    <div id="h-street">—</div>
+    <div id="h-near"></div>
+    <dl>
+      <div class="row"><dt>Time</dt><dd id="h-time">—</dd></div>
+      <div class="row"><dt>Heading</dt><dd id="h-hdg">—</dd></div>
+      <div class="row"><dt>Built</dt><dd id="h-bld">—</dd></div>
+    </dl>
+    <div id="h-fps">—</div>
+  </div>
+  <div id="note" class="plate"></div>
+  <div id="keys" class="plate">
+    <h5>Walk</h5>
+    <span class="kk"><b>W</b><b>A</b><b>S</b><b>D</b></span><span class="kl">walk</span>
+    <span class="kk"><b>Shift</b></span><span class="kl">brisk</span>
+    <span class="kk"><b>F</b></span><span class="kl">fly over the roofs</span>
+    <span class="kk"><b>Space</b><b>C</b></span><span class="kl">up · down (flying)</span>
+    <h5>Look</h5>
+    <span class="kk"><b>[</b><b>]</b></span><span class="kl">time of day</span>
+    <span class="kk"><b>M</b></span><span class="kl">map of 1903</span>
+    <span class="kk"><b>G</b></span><span class="kl">go to a landmark</span>
+    <span class="kk"><b>H</b></span><span class="kl">hide this</span>
+  </div>
+</div>
+
+<div id="overlay">
+  <div id="panel">
+    <h1>Potsdam</h1>
+    <div class="sub">1900 · Residenzstadt · the town inside the excise wall</div>
+    <div class="go">Click to walk</div>
+    <div class="fine">
+      The streets, the buildings and the water as they stood around 1900 —<br>
+      from today's map where the old town survives, from the historical map where it does not.<br>
+      <span id="credits"></span>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

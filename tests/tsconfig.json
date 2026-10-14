@@ -1,0 +1,7 @@
+{
+  // The tests, type-checked like the source (bun run check). They run
+  // in Node under Vitest, so Node's types instead of the DOM's worker ones.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node", "vite/client"] },
+  "include": [".", "../src"]
+}

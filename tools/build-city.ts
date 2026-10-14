@@ -1,0 +1,282 @@
+/* Build a city for the app from the reduced map data (tools/fetch.ts).
+
+   Usage: node tools/build-city.ts [city]   → src/cities/<city>/city.json
+
+   What is shown is decided feature by feature, from the data's own
+   dates where it has them:
+   - OpenHistoricalMap features are kept when they stand in the year
+     (start_date ≤ year < end_date).
+   - OpenStreetMap buildings with a start_date are kept when it is on or
+     before the year; undated ones are judged by the historical
+     map (tools/mask.ts) and by what OHM says stood on the spot.
+   See README.md, "Where the city comes from". */
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { CITIES } from './cities.ts';
+import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
+import { area, bbox, centroid, inside, orient, simplify, type Ring } from '../src/geom/poly.ts';
+import type { Area, AreaKind, Building, City, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
+import { HISTORY } from './history/index.ts';
+
+const id = process.argv[2] ?? 'potsdam';
+const spec = CITIES[id];
+if (!spec) throw new Error('unknown city ' + id);
+const YEAR = spec.year;
+const hist = HISTORY[id]!;
+const { fwd } = projector(spec.origin[0], spec.origin[1]);
+const osm = load(`data/${id}/osm.json`, fwd);
+const ohm = load(`data/${id}/ohm.json`, fwd);
+const [bx0, bz1] = fwd(spec.bbox[0], spec.bbox[1]), [bx1, bz0] = fwd(spec.bbox[2], spec.bbox[3]);
+const inBounds = (p: Pt) => p[0] >= bx0 && p[0] <= bx1 && p[1] >= bz0 && p[1] <= bz1;
+
+const flat = (pts: Pt[]): Ring => pts.flatMap((p) => [round(p[0]), round(p[1])]);
+const round = (v: number) => Math.round(v * 100) / 100;
+const num = (s: string | undefined) => {
+  if (!s) return undefined;
+  const v = parseFloat(s.replace(',', '.'));
+  return Number.isFinite(v) ? v : undefined;
+};
+
+/* ── Colours ──────────────────────────────────────────────────── */
+const NAMED: Record<string, string> = {
+  white: '#ece8de', beige: '#d9c9a3', yellow: '#dcc27a', lightyellow: '#e6d9a6', ivory: '#ece4cc', cream: '#e8dcb8',
+  orange: '#d49a5a', red: '#a8503c', brown: '#7e5a44', pink: '#d8a9a0', rose: '#d6a29a', salmon: '#d89a84',
+  grey: '#a9a49b', gray: '#a9a49b', lightgrey: '#c9c4ba', lightgray: '#c9c4ba', darkgrey: '#6f6b66', darkgray: '#6f6b66',
+  green: '#8a9c7a', lightgreen: '#b5c4a0', blue: '#8fa2b4', lightblue: '#b3c3cf', black: '#38363a', sand: '#d4c09a',
+  ochre: '#c9a25e', tan: '#c8ab84', silver: '#b8b8b4', olive: '#8c8a5c', maroon: '#7a3f34', terracotta: '#b0634a',
+};
+function colour(s: string | undefined): string | undefined {
+  if (!s) return undefined;
+  const v = s.trim().toLowerCase().replace(/[\s_-]/g, '');
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  if (/^#[0-9a-f]{3}$/.test(v)) return '#' + [...v.slice(1)].map((c) => c + c).join('');
+  return NAMED[v];
+}
+// Plaster colours of baroque and classicist Potsdam: ochres, sand,
+// pale yellow, rose and grey, picked per building by a hash of its id
+// where the map gives none.
+const PLASTER = ['#d9c39a', '#dcc589', '#e3d4ae', '#cfb48a', '#d8b9a0', '#cdbfa6', '#e2d3b9', '#c9a979', '#d4c4b0', '#bfae94', '#e0c8a2', '#d3b28e'];
+function hashStr(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+const ROOF_MAT: Record<string, string> = {
+  roof_tiles: '#9b4f37', tile: '#9b4f37', tiles: '#9b4f37', clay: '#9b4f37', slate: '#4d5158', metal: '#7a8288',
+  copper: '#5f8f7c', zinc: '#83898d', tar_paper: '#4a4a4a', concrete: '#8a8780', glass: '#9aaab4', thatch: '#8a7550',
+};
+
+/* ── Buildings ─────────────────────────────────────────────────── */
+const SKIP_BUILDING = new Set(['garage', 'garages', 'carport', 'construction', 'container', 'allotment_house', 'cabin', 'kiosk',
+  'roof', 'ruins', 'no', 'bunker', 'transformer_tower', 'toilets', 'greenhouse', 'tent', 'hut']);
+const ROOFS: Record<string, RoofShape> = {
+  flat: 'flat', gabled: 'gabled', hipped: 'hipped', mansard: 'mansard', gambrel: 'mansard', pyramidal: 'pyramidal',
+  dome: 'dome', 'half-hipped': 'half-hipped', side_hipped: 'hipped', saltbox: 'gabled', double_saltbox: 'gabled',
+  quadruple_saltbox: 'hipped', corner_saltbox: 'gabled', round: 'gabled', skillion: 'flat',
+};
+
+function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
+  const t = f.tags;
+  const out: Building[] = [];
+  const levels = num(t['building:levels']) ?? num(t.levels);
+  const roofLevels = num(t['roof:levels']);
+  const h = num(t.height), minH = num(t.min_height), minL = num(t['building:min_level']);
+  const kind = buildingKind(t);
+  const storey = kind === 'church' || kind === 'palace' ? 5 : 3.5;
+  for (let k = 0; k < f.outer.length; k++) {
+    let outer = simplify(flat(f.outer[k]!), 0.25);
+    if (Math.abs(area(outer)) < 6) continue;
+    outer = orient(outer, true);
+    const holes = f.inner.map((r) => orient(simplify(flat(r), 0.25), false)).filter((r) => Math.abs(area(r)) > 4)
+      .filter((r) => inside(outer, r[0]!, r[1]!));
+    const shape = ROOFS[t['roof:shape'] ?? ''] ?? defaultRoof(t, kind);
+    const ext = bbox(outer), depth = Math.min(ext[2] - ext[0], ext[3] - ext[1]);
+    const lv = levels ?? defaultLevels(t, kind, Math.abs(area(outer)));
+    let eave = h !== undefined ? h : lv * storey + 0.6;
+    let roofH = num(t['roof:height']) ?? (roofLevels !== undefined ? roofLevels * 2.8 : 0);
+    if (shape !== 'flat' && roofH === 0) roofH = Math.min(depth * 0.5, 9) * (shape === 'mansard' ? 0.9 : 0.95);
+    if (shape === 'flat') roofH = 0;
+    if (h !== undefined) eave = Math.max(2.5, h - roofH);
+    const seed = hashStr(f.id);
+    const b: Building = {
+      id: f.id, src, outer,
+      eave: round(eave), roofH: round(roofH), roof: shape, storey,
+      colour: colour(t['building:colour']) ?? PLASTER[seed % PLASTER.length]!,
+      roofColour: colour(t['roof:colour']) ?? ROOF_MAT[t['roof:material'] ?? ''] ?? (kind === 'church' || kind === 'palace' ? '#5a5e66' : '#9b4f37'),
+    };
+    if (holes.length) b.holes = holes;
+    const base = minH ?? (minL !== undefined ? minL * storey : undefined);
+    if (base) b.base = base;
+    if (t.name) b.name = t.name;
+    const addr = t['addr:street'] && t['addr:housenumber'] ? `${t['addr:street']} ${t['addr:housenumber']}` : undefined;
+    if (addr) b.addr = addr;
+    const y = year(t.start_date) ?? year(t.year_of_construction);
+    if (y) b.year = y;
+    if (kind) b.kind = kind;
+    if (kind === 'shed' || kind === 'colonnade') b.windows = false;
+    out.push(b);
+  }
+  return out;
+}
+
+function buildingKind(t: Tags): Building['kind'] {
+  const b = t.building ?? '';
+  if (b === 'church' || b === 'chapel' || b === 'cathedral' || t.amenity === 'place_of_worship') return 'church';
+  if (b === 'palace' || b === 'castle' || t.historic === 'castle') return 'palace';
+  if (t.historic === 'city_gate' || t.barrier === 'city_gate') return 'gate';
+  if (b === 'shed' || b === 'stable' || b === 'barn' || b === 'service' || b === 'riding_hall' || b === 'industrial' || b === 'warehouse') return 'shed';
+  if (b === 'roof') return 'colonnade';
+  if (b === 'civic' || b === 'public' || b === 'government' || b === 'school' || b === 'train_station' || b === 'hospital') return 'public';
+  return 'house';
+}
+function defaultLevels(t: Tags, kind: Building['kind'], a: number) {
+  if (kind === 'shed') return 1;
+  if (kind === 'church') return 3;
+  if (kind === 'gate') return 2;
+  if (t.building === 'house' || t.building === 'detached') return 2;
+  return a < 40 ? 1 : a < 90 ? 2 : 3;
+}
+function defaultRoof(t: Tags, kind: Building['kind']): RoofShape {
+  if (kind === 'gate') return 'flat';
+  if (kind === 'palace' || kind === 'public') return 'hipped';
+  return 'gabled';
+}
+
+/* ── Gather ───────────────────────────────────────────────────── */
+const buildings: Building[] = [];
+const ohmBuildings = ohm.feats.filter((f) => f.closed && f.tags.building && f.tags.building !== 'construction');
+const ohmAlive = ohmBuildings.filter((f) => aliveIn(f.tags, YEAR));
+// OHM footprints of buildings that came later than the year: an
+// undated OSM building on that spot is that later building.
+const ohmLater = ohmBuildings.filter((f) => (year(f.tags.start_date) ?? -Infinity) > YEAR);
+const covers = (fs: Feature[], x: number, z: number) => fs.some((f) => f.outer.some((r) => inside(flat(r), x, z)));
+
+const stats = { osmDated: 0, osmUndated: 0, osmDroppedLater: 0, osmDroppedOhm: 0, osmDroppedMask: 0, ohm: 0, mtb: 0 };
+for (const f of osm.feats) {
+  const t = f.tags;
+  if (!f.closed || !t.building || t['building:part'] || SKIP_BUILDING.has(t.building)) continue;
+  if (!f.outer[0] || !inBounds(f.outer[0][0]!)) continue;
+  if (hist.drop.has(f.id)) continue;
+  const y = year(t.start_date) ?? year(t.year_of_construction) ?? year(t.construction_date);
+  if (y !== undefined && y > YEAR) { stats.osmDroppedLater++; continue; }
+  const [cx, cz] = centroid(flat(f.outer[0]));
+  if (covers(ohmAlive, cx, cz)) { stats.osmDroppedOhm++; continue; }   // OHM has the 1900 building here
+  if (y === undefined) {
+    if (covers(ohmLater, cx, cz)) { stats.osmDroppedLater++; continue; }
+    stats.osmUndated++;
+  } else stats.osmDated++;
+  buildings.push(...toBuilding(f, 'osm'));
+}
+for (const f of ohmAlive) {
+  if (!f.outer[0] || !inBounds(f.outer[0][0]!)) continue;
+  if (hist.drop.has('ohm:' + f.id)) continue;
+  stats.ohm++;
+  buildings.push(...toBuilding(f, 'ohm').map((b) => ({ ...b, id: 'ohm:' + b.id })));
+}
+for (const b of buildings) Object.assign(b, hist.patch[b.id] ?? {});
+
+/* ── Areas ────────────────────────────────────────────────────── */
+function areaKind(t: Tags): AreaKind | undefined {
+  if (t.natural === 'water' || t.waterway === 'riverbank' || t.landuse === 'basin' || t.landuse === 'reservoir') return 'water';
+  if (t.leisure === 'park' || t.leisure === 'garden') return 'park';
+  if (t.landuse === 'grass' || t.landuse === 'meadow' || t.landuse === 'village_green' || t.natural === 'grassland') return 'grass';
+  if (t.landuse === 'cemetery' || t.amenity === 'grave_yard') return 'cemetery';
+  if (t.place === 'square' || t.highway === 'pedestrian' || t['area:highway']) return 'square';
+  if (t.landuse === 'railway') return 'rail';
+  return undefined;
+}
+const areas: Area[] = [];
+function addAreas(fs: Feature[], hist1900: boolean) {
+  for (const f of fs) {
+    if (!f.closed) continue;
+    if (hist1900 && !aliveIn(f.tags, YEAR)) continue;
+    const k = areaKind(f.tags);
+    if (!k) continue;
+    for (const o of f.outer) {
+      const r = flat(o);
+      if (Math.abs(area(r)) < 4) continue;
+      const a: Area = { kind: k, outer: orient(r, true) };
+      const holes = f.inner.map((h) => orient(flat(h), false));
+      if (holes.length) a.holes = holes;
+      if (f.tags.name) a.name = f.tags.name;
+      areas.push(a);
+    }
+  }
+}
+// Modern areas (water and green) first, then what OHM says of 1900 on top.
+addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
+addAreas(ohm.feats, true);
+
+/* ── Streets ──────────────────────────────────────────────────── */
+const WIDTH: Record<string, [StreetKind, number]> = {
+  primary: ['main', 18], secondary: ['main', 16], tertiary: ['street', 14], residential: ['street', 13], unclassified: ['street', 11],
+  living_street: ['street', 10], pedestrian: ['street', 12], service: ['lane', 6], footway: ['path', 3], path: ['path', 2.5],
+  cycleway: ['path', 2.5], track: ['lane', 4], steps: ['path', 3],
+};
+const streets: Street[] = [];
+function addStreets(fs: Feature[], hist1900: boolean) {
+  for (const f of fs) {
+    const t = f.tags;
+    if (!t.highway || !f.line || (f.closed && t.area === 'yes')) continue;
+    if (hist1900 && !aliveIn(t, YEAR)) continue;
+    const w = WIDTH[t.highway];
+    if (!w) continue;
+    const bridge = t.bridge && t.bridge !== 'no';
+    const kind: StreetKind = bridge ? (w[0] === 'path' ? 'footbridge' : 'bridge') : w[0];
+    const s: Street = {
+      kind, w: num(t.width) ?? w[1], pts: flat(f.line),
+      paving: w[0] === 'path' ? 'gravel' : w[0] === 'lane' ? 'earth' : 'cobble',
+    };
+    if (t.name) s.name = t.name;
+    streets.push(s);
+  }
+}
+addStreets(osm.feats, false);
+addStreets(ohm.feats, true);
+
+/* ── Walls, rails, trees ─────────────────────────────────────── */
+const walls: Wall[] = [];
+for (const f of ohm.feats) {
+  if (!f.line || !aliveIn(f.tags, YEAR)) continue;
+  if (f.tags.barrier === 'city_wall') walls.push({ pts: flat(f.line), h: 4.2, t: 0.8, kind: 'city' });
+  else if (f.tags.barrier === 'wall') walls.push({ pts: flat(f.line), h: 2.4, t: 0.5, kind: 'garden' });
+}
+const rails: Rail[] = [];
+for (const f of ohm.feats) {
+  const r = f.tags.railway;
+  if (!f.line || !r || !aliveIn(f.tags, YEAR)) continue;
+  if (r === 'rail' || r === 'light_rail') rails.push({ pts: flat(f.line), kind: 'rail' });
+  else if (r === 'tram') rails.push({ pts: flat(f.line), kind: 'tram' });
+}
+const trees: Tree[] = [];
+for (const p of osm.points) {
+  if (p.tags.natural !== 'tree' || !inBounds(p.p)) continue;
+  const seed = hashStr(p.id);
+  trees.push({ x: round(p.p[0]), z: round(p.p[1]), h: 9 + (seed % 9), r: 2.8 + (seed % 5) * 0.5 });
+}
+
+/* ── Labels ───────────────────────────────────────────────────── */
+const labels: Label[] = [];
+for (const b of buildings) {
+  if (!b.name || b.src === 'mtb') continue;
+  const [x, z] = centroid(b.outer);
+  labels.push({ x: round(x), z: round(z), text: b.name, kind: 'landmark' });
+}
+
+/* ── Clip to bounds and write ─────────────────────────────────── */
+const keepRing = (r: Ring) => { for (let i = 0; i < r.length; i += 2) if (inBounds([r[i]!, r[i + 1]!])) return true; return false; };
+const city: City = {
+  id, name: hist.name, year: YEAR, origin: spec.origin,
+  bounds: [round(bx0), round(bz0), round(bx1), round(bz1)],
+  spawn: (() => { const [x, z] = fwd(hist.spawn.lat, hist.spawn.lon); return { x: round(x), z: round(z), yaw: hist.spawn.yaw }; })(),
+  buildings,
+  areas: areas.filter((a) => keepRing(a.outer) || a.kind === 'water'),
+  streets: streets.filter((s) => keepRing(s.pts)),
+  walls: walls.filter((w) => keepRing(w.pts)),
+  rails: rails.filter((r) => keepRing(r.pts)),
+  trees, labels,
+  water: hist.water,
+  credits: hist.credits,
+};
+mkdirSync(`src/cities/${id}`, { recursive: true });
+writeFileSync(`src/cities/${id}/city.json`, JSON.stringify(city));
+console.log(stats, { buildings: buildings.length, areas: city.areas.length, streets: city.streets.length, walls: city.walls.length, rails: city.rails.length, trees: trees.length });

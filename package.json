@@ -1,0 +1,27 @@
+{
+  "name": "historical-walk",
+  "version": "0.1.0",
+  "description": "A first-person walk through historical city centres, built from real maps",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "tsc -p . && tsc -p tests",
+    "test": "vitest run",
+    "fetch": "node tools/fetch.ts",
+    "city": "node tools/build-city.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "@types/three": "0.160.0",
+    "earcut": "3.0.1",
+    "puppeteer-core": "25.12.0",
+    "three": "0.160.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "packageManager": "bun@1.3.14"
+}
