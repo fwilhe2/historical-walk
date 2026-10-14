@@ -73,11 +73,22 @@ export const LANDMARKS: Landmark[] = [
        Zeno in Verona closing the view down the Brandenburger Straße
        from the west (de.wikipedia, "St. Peter und Paul (Potsdam)"). */
     id: 'peterpaul', about: 'The Catholic parish church, 1867–70, by Wilhelm Salzenberg after a design by Friedrich August Stüler; its campanile follows San Zeno in Verona.', name: 'St. Peter und Paul', year: 1870, at: [-49, -639], front: 270,
-    build(P, ring) {
+    build(P) {
       const brick = { colour: '#d4b878', wall: 'brick' as const, kind: 'church' as const, storey: 8 };
-      P.footprint(ring, 0, 16, { ...brick, roof: 'hipped', roofH: 8, roofColour: SLATE });
-      P.box(0, P.F.front - 5, 10, 10, 0, 49, { ...brick, storey: 10 });
-      P.box(0, P.F.front - 5, 10.6, 10.6, 49, 50, { ...brick, windows: false, roof: 'spire', roofH: 14, roofColour: '#8e5a40' });
+      const roof = { roof: 'gabled' as const, roofColour: '#5a5e66' };
+      const F = P.F, L = F.front + F.back, W = F.left + F.right;
+      // the long arm (west front to the east apse) and the cross arm, 18 m wide
+      P.box(0, (F.front - F.back) / 2 + 5, 16, L - 10, 0, 17, { ...brick, ...roof, roofH: 7, ridgeAlong: 'front' });
+      P.box(0, (F.front - F.back) / 2 - 6, W, 16, 0, 17, { ...brick, ...roof, roofH: 7, ridgeAlong: 'across' });
+      // the crossing: a low square tower with a pyramid roof
+      P.box(0, (F.front - F.back) / 2 - 6, 11, 11, 17, 24, { ...brick, roof: 'pyramidal', roofH: 5, roofColour: '#5a5e66' });
+      // three conches at the east end, after the Hagia Sophia
+      const e = -F.back + 5;
+      P.ngon(0, e, 7, 14, 0, 14, { ...brick, roof: 'dome', roofH: 4, roofColour: '#5a5e66' });
+      for (const u of [-8, 8]) P.ngon(u, e + 4, 4.5, 12, 0, 11, { ...brick, roof: 'dome', roofH: 3, roofColour: '#5a5e66' });
+      // the campanile at the west front, 64 m to the top of its roof
+      P.box(0, F.front - 5, 10, 10, 0, 49, { ...brick, storey: 10 });
+      P.box(0, F.front - 5, 10.6, 10.6, 49, 50, { ...brick, windows: false, roof: 'spire', roofH: 14, roofColour: '#8e5a40' });
     },
   },
   {
