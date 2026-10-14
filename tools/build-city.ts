@@ -664,6 +664,7 @@ for (const p of osm.points) {
    landmarks, the churches or the lost palaces. */
 {
   const shopping = streets.filter((st) => (st.kind === 'main' || st.kind === 'street') && hist.shopStreets.includes(st.name ?? ''));
+  for (const st of shopping) st.busy = true;
   let n = 0;
   for (const b of buildings) {
     if (b.kind && b.kind !== 'house') continue;

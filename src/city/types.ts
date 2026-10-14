@@ -50,7 +50,7 @@ export type AreaKind = 'water' | 'park' | 'grass' | 'square' | 'garden' | 'yard'
 export interface Area { kind: AreaKind; outer: Ring; holes?: Ring[]; name?: string }
 
 export type StreetKind = 'main' | 'street' | 'lane' | 'path' | 'bridge' | 'footbridge';
-export interface Street { kind: StreetKind; name?: string; w: number; pts: Ring; paving: 'cobble' | 'sett' | 'gravel' | 'earth' | 'plank' }
+export interface Street { kind: StreetKind; name?: string; w: number; pts: Ring; paving: 'cobble' | 'sett' | 'gravel' | 'earth' | 'plank'; busy?: true }
 
 export interface Wall { pts: Ring; h: number; t: number; kind: 'city' | 'garden' | 'railing' | 'parapet'; base?: number }
 export interface Rail { pts: Ring; kind: 'rail' | 'tram' }

@@ -5,6 +5,7 @@ import { buildGround } from './city/ground';
 import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, buildWoods, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
 import { buildTraffic } from './city/traffic';
+import { buildPeople } from './city/people';
 import { setTerrain } from './city/terrain';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
@@ -37,6 +38,8 @@ scene.add(buildLamps(city));
 scene.add(buildRails(city));
 const traffic = buildTraffic(city);
 scene.add(traffic.group);
+const people = buildPeople(city);
+scene.add(people.group);
 const segs = buildSegs(city);
 // The sky through the environment map is the ambient light: about
 // a fifth of the sun's on a clear afternoon, which 0.7 gives here.
@@ -116,7 +119,7 @@ if (probe) {
       await this.frames(3);
     },
     state() {
-      return JSON.stringify({ cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
+      return JSON.stringify({ people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -194,6 +197,7 @@ renderer.setAnimationLoop(() => {
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
   traffic.step(dt);
+  people.step(dt, walker.x, walker.z, nightLight.value);
   cloudTime.value += dt;
   clouds.position.x = walker.x; clouds.position.z = walker.z;
   hud.update(dt, walker, sunState.hour, ground);
