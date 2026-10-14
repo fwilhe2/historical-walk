@@ -59,5 +59,10 @@ export const POTSDAM: History = {
     { name: 'Alter Markt', ring: [-45, -88, 100, -98, 104, -25, 60, -20, -45, -20] },
   ],
   drop: new Set([]),
-  patch: {},
+  patch: {
+    // The Gloriette on the Bassinplatz (1739–1945, OHM): a garden
+    // pavilion, not a house — blank walls under a small dome. Form
+    // estimated.
+    'ohm:w200905633': { eave: 5.5, roof: 'dome', roofH: 3, windows: false, wall: 'stone', colour: '#e3d8c0', roofColour: '#6f9a85', kind: 'public' },
+  },
 };

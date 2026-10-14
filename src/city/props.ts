@@ -8,18 +8,82 @@ import type { City } from './types';
    which still closed the town in 1900 (it came down 1900–1905), and
    garden walls, as plastered boxes along their lines with a coping. */
 
-function lumpy(radius: number) {
-  const g = new THREE.IcosahedronGeometry(radius, 2);
-  const p = g.attributes.position!;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const n = Math.sin(v.x * 3.1) * Math.sin(v.y * 2.7 + 1) * Math.sin(v.z * 3.7 + 2);
-    v.multiplyScalar(1 + 0.18 * n);
-    v.y *= 0.85;
-    p.setXYZ(i, v.x, v.y, v.z);
+/* A sprig of leaves on a transparent canvas: the texture every leaf
+   card of every crown shares. Lindens and chestnuts at 50 m read as a
+   mass of small leaves with sky through it, which is what this is. */
+function leafTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.strokeStyle = 'rgba(70,55,40,0.9)'; g.lineWidth = 2;
+  for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(128, 250); g.lineTo(30 + rnd() * 196, 20 + rnd() * 150); g.stroke(); }
+  for (let i = 0; i < 260; i++) {
+    const x = 16 + rnd() * 224, y = 10 + rnd() * 220;
+    const dx = x - 128, dy = y - 120;
+    if (dx * dx / 1.1 + dy * dy > 118 * 118) continue;   // a rounded sprig
+    const l = 0.35 + rnd() * 0.65;
+    g.fillStyle = `rgb(${Math.round(70 * l + 20)},${Math.round(120 * l + 35)},${Math.round(40 * l + 10)})`;
+    g.save(); g.translate(x, y); g.rotate(rnd() * Math.PI * 2);
+    g.beginPath(); g.ellipse(0, 0, 9 + rnd() * 5, 5 + rnd() * 3, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
   }
-  g.computeVertexNormals();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/* One crown: leaf cards scattered through a unit ellipsoid, turned
+   every way, with normals pointing out from the crown's centre so the
+   whole crown shades like one soft volume (lit side, shaded side)
+   rather than as a heap of flat cards. */
+function crownGeometry() {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
+  const v = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < 46; i++) {
+    // a point in the ellipsoid, biased outward
+    do { v.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (v.lengthSq() > 1);
+    v.multiplyScalar(0.55 + 0.45 * Math.cbrt(v.length()) / Math.max(v.length(), 1e-3) * v.length());
+    a.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+    b.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).cross(a).normalize();
+    const s = 0.55 + rnd() * 0.3;
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+    const P = corners.map(([p, q]) => v.clone().addScaledVector(a, p * s).addScaledVector(b, q * s));
+    for (const k of [0, 1, 2, 0, 2, 3]) {
+      const p = P[k]!;
+      pos.push(p.x, p.y, p.z);
+      n.copy(p).normalize();
+      nrm.push(n.x, n.y, n.z);
+      uv.push((corners[k]![0] + 1) / 2, (corners[k]![1] + 1) / 2);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  return g;
+}
+
+// A trunk that forks into three limbs, reaching into the crown.
+function trunkGeometry() {
+  const parts = [new THREE.CylinderGeometry(0.11, 0.17, 1, 7).translate(0, 0.5, 0)];
+  for (let k = 0; k < 3; k++) {
+    const limb = new THREE.CylinderGeometry(0.035, 0.09, 0.75, 5).translate(0, 0.375, 0);
+    limb.rotateZ(0.55); limb.rotateY(k * 2.1 + 0.4); limb.translate(0, 0.92, 0);
+    parts.push(limb);
+  }
+  const pos: number[] = [], nrm: number[] = [];
+  for (const p of parts) {
+    const q = p.index ? p.toNonIndexed() : p;
+    pos.push(...q.attributes.position!.array); nrm.push(...q.attributes.normal!.array);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   return g;
 }
 
@@ -28,28 +92,20 @@ export function buildTrees(city: City) {
   group.name = 'trees';
   const n = city.trees.length;
   if (!n) return group;
-  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.24, 1, 6).translate(0, 0.5, 0),
-    new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 }), n);
-  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
-  crownMat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLp;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLp = position;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLp;\nfloat tH(vec3 p){return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453);}')
-      .replace('#include <map_fragment>', '#include <map_fragment>\nfloat lf = tH(floor(vLp * 5.0));\ndiffuseColor.rgb *= 0.6 + 0.6 * lf;');
-  };
-  crownMat.customProgramCacheKey = () => 'crown';
-  const crown = new THREE.InstancedMesh(lumpy(1), crownMat, n);
+  const trunk = new THREE.InstancedMesh(trunkGeometry(), new THREE.MeshStandardMaterial({ color: 0x3f342b, roughness: 0.95 }), n);
+  const leaves = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.45, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85 });
+  const crown = new THREE.InstancedMesh(crownGeometry(), leaves, n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
   const col = new THREE.Color();
   city.trees.forEach((tr, i) => {
-    const trunkH = tr.h * 0.38;
-    m.compose(t.set(tr.x, 0, tr.z), q.identity(), s.set(1 + tr.r * 0.06, trunkH + tr.r * 0.5, 1 + tr.r * 0.06));
-    trunk.setMatrixAt(i, m);
+    const trunkH = tr.h * 0.42;
     q.setFromAxisAngle(t.set(0, 1, 0), (i * 2.399) % (Math.PI * 2));
-    m.compose(t.set(tr.x, trunkH + (tr.h - trunkH) * 0.5, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
+    m.compose(t.set(tr.x, 0, tr.z), q, s.set(1 + tr.r * 0.08, trunkH, 1 + tr.r * 0.08));
+    trunk.setMatrixAt(i, m);
+    m.compose(t.set(tr.x, trunkH + (tr.h - trunkH) * 0.45, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
     crown.setMatrixAt(i, m);
     const k = (i * 0.618) % 1;
-    crown.setColorAt(i, col.setRGB(0.12 + 0.05 * k, 0.2 + 0.06 * k, 0.07));
+    crown.setColorAt(i, col.setRGB(0.62 + 0.22 * k, 0.66 + 0.14 * k, 0.5 + 0.15 * (1 - k)));
   });
   trunk.castShadow = crown.castShadow = true;
   crown.receiveShadow = true;
