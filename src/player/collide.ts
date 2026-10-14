@@ -26,6 +26,7 @@ export function buildSegs(city: City): Segs {
     for (const h of b.holes ?? []) ring(h, true);
   }
   for (const w of city.walls) ring(w.pts, false);
+  for (const l of city.lamps) ring([l.x - 0.15, l.z - 0.15, l.x + 0.15, l.z - 0.15, l.x + 0.15, l.z + 0.15, l.x - 0.15, l.z + 0.15], true);
   // columns as small squares
   for (const c of city.columns) {
     if (c.base > 1) continue;

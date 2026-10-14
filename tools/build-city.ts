@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
 import { area, bbox, buffer, centroid, inside, inset, obb, orient, segDist2, simplify, straighten, type Ring } from '../src/geom/poly.ts';
-import type { Area, AreaKind, Building, City, Column, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
+import type { Area, AreaKind, Building, City, Column, Label, Lamp, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
 import { HISTORY } from './history/index.ts';
 import { blockOutlines, loadMask, maskShare, type Mask } from './mask.ts';
 import { Parts, frame } from './landmarks.ts';
@@ -260,86 +260,6 @@ for (const f of ohm.feats) {
   canals.push(b);
 }
 
-/* ── Lost frontage, rebuilt from the historical map's blocks ──────
-   Inside the closely built town every block of the map was lined
-   with houses wall to wall. Each block's outline is walked edge by
-   edge and cut into parcels of 10–16 m frontage and a house's depth;
-   a parcel is built unless a kept building already stands on it, or
-   it falls in water or in a square or park of the year. What gets
-   built is a plain townhouse of its time and place — two or three
-   storeys, the ridge along the street, a gable or mansard roof — not
-   the house that stood there, which the map cannot tell. */
-if (mask) {
-  const grid = new Map<string, Building[]>();
-  const G = 25;
-  for (const b of buildings) {
-    const [x0, z0, x1, z1] = bbox(b.outer);
-    for (let i = Math.floor(x0 / G); i <= Math.floor(x1 / G); i++) for (let j = Math.floor(z0 / G); j <= Math.floor(z1 / G); j++) {
-      const k = i + ',' + j;
-      let l = grid.get(k);
-      if (!l) grid.set(k, (l = []));
-      l.push(b);
-    }
-  }
-  const built = (x: number, z: number) => (grid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((b) => inside(b.outer, x, z));
-  const open = areas.filter((a) => a.kind !== 'water');
-  const water = areas.filter((a) => a.kind === 'water');
-  const inAny = (as: Area[], x: number, z: number) => as.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)));
-  let n = 0;
-  for (const raw of blockOutlines(mask, 250)) {
-    // The blur and the closing grow the map's blocks by a metre or
-    // two past the building line; take the frontage that far in.
-    const ring = inset(straighten(orient(simplify(raw, 1.5), true), 0.45, 2.5), 1.8);
-    const box = obb(ring);
-    const maxDepth = Math.min(12.5, box.b * 0.9);
-    if (maxDepth < 5) continue;
-    const m = ring.length / 2;
-    for (let e = 0; e < m; e++) {
-      const p = (e + m - 1) % m, q = (e + 1) % m;
-      const ax = ring[2 * e]!, az = ring[2 * e + 1]!, bx2 = ring[2 * q]!, bz2 = ring[2 * q + 1]!;
-      const px = ring[2 * p]!, pz = ring[2 * p + 1]!;
-      const dx = bx2 - ax, dz = bz2 - az, L = Math.hypot(dx, dz);
-      if (L < 6) continue;
-      const ux = dx / L, uz = dz / L, ix = -uz, iz = ux;   // along, inward
-      // A convex corner at the start belongs to the previous edge's last
-      // parcel, which runs to its end and a house deep: start past it.
-      const pl = Math.hypot(ax - px, az - pz) || 1;
-      const sinTurn = ((ax - px) * dz - (az - pz) * dx) / (pl * L);
-      const s0 = sinTurn > 0.7 ? Math.min(maxDepth, L * 0.5) : 0;
-      const len = L - s0;
-      if (len < 5) continue;
-      const seed = hashStr(`${Math.round(ax)},${Math.round(az)}`);
-      const target = 10 + (seed % 7);
-      const k = Math.max(1, Math.round(len / target));
-      for (let i = 0; i < k; i++) {
-        const t0 = s0 + (len * i) / k, t1 = s0 + (len * (i + 1)) / k;
-        const ps = hashStr(`${e}:${i}:${seed}`);
-        const depth = maxDepth * (0.85 + 0.15 * ((ps >>> 3) % 7) / 6);
-        const f0x = ax + ux * t0, f0z = az + uz * t0, f1x = ax + ux * t1, f1z = az + uz * t1;
-        // samples a step inside the frontage: any one built, water or open means no house
-        let skip = !inside(hist.town, (f0x + f1x) / 2 + ix * depth / 2, (f0z + f1z) / 2 + iz * depth / 2);
-        for (const f of [0.15, 0.5, 0.85]) for (const d of [1.5, 4, depth * 0.85]) {
-          const sx = f0x + (f1x - f0x) * f + ix * d, sz = f0z + (f1z - f0z) * f + iz * d;
-          if (built(sx, sz) || inAny(water, sx, sz) || inAny(open, sx, sz) || !mask.at(sx, sz)) skip = true;
-        }
-        if (skip) continue;
-        const outer = orient([f0x, f0z, f1x, f1z, f1x + ix * depth, f1z + iz * depth, f0x + ix * depth, f0z + iz * depth].map(round), true);
-        if (Math.abs(area(outer)) < 20) continue;
-        const levels = ps % 5 < 3 ? 3 : 2;
-        const storey = 3.3 + (ps % 3) * 0.1;
-        const roof: RoofShape = ps % 10 < 3 ? 'mansard' : 'gabled';
-        buildings.push({
-          id: `mtb${n++}`, src: 'mtb', outer,
-          eave: round(levels * storey + 0.6), roofH: round(depth * (roof === 'mansard' ? 0.42 : 0.48)), roof,
-          ridge: Math.atan2(uz, ux), storey,
-          colour: PLASTER[(ps >>> 5) % PLASTER.length]!, roofColour: (ps >>> 9) % 6 === 0 ? '#555a60' : '#9b4f37',
-        });
-        stats.mtb++;
-      }
-    }
-  }
-}
-
 /* ── Streets ──────────────────────────────────────────────────── */
 const WIDTH: Record<string, [StreetKind, number]> = {
   primary: ['main', 18], secondary: ['main', 16], tertiary: ['street', 14], residential: ['street', 13], unclassified: ['street', 11],
@@ -423,6 +343,96 @@ function builtShare(p: number[]) {
   return n ? k / n : 0;
 }
 
+/* ── Lost frontage, rebuilt from the historical map's blocks ──────
+   Inside the closely built town every block of the map was lined
+   with houses wall to wall. Each block's outline is walked edge by
+   edge and cut into parcels of 10–16 m frontage and a house's depth;
+   a parcel is built unless a kept building already stands on it, or
+   it falls in water or in a square or park of the year. What gets
+   built is a plain townhouse of its time and place — two or three
+   storeys, the ridge along the street, a gable or mansard roof — not
+   the house that stood there, which the map cannot tell. */
+if (mask) {
+  const grid = new Map<string, Building[]>();
+  const G = 25;
+  for (const b of buildings) {
+    const [x0, z0, x1, z1] = bbox(b.outer);
+    for (let i = Math.floor(x0 / G); i <= Math.floor(x1 / G); i++) for (let j = Math.floor(z0 / G); j <= Math.floor(z1 / G); j++) {
+      const k = i + ',' + j;
+      let l = grid.get(k);
+      if (!l) grid.set(k, (l = []));
+      l.push(b);
+    }
+  }
+  const built = (x: number, z: number) => (grid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((b) => inside(b.outer, x, z));
+  // carriageways of the year, binned like the buildings: no house in a street
+  const sgrid = new Map<string, Street[]>();
+  for (const st of streets) {
+    if (st.kind === 'path' || st.kind === 'footbridge') continue;
+    const [x0, z0, x1, z1] = bbox(st.pts);
+    for (let i = Math.floor((x0 - 10) / G); i <= Math.floor((x1 + 10) / G); i++) for (let j = Math.floor((z0 - 10) / G); j <= Math.floor((z1 + 10) / G); j++) {
+      const k = i + ',' + j; let l = sgrid.get(k); if (!l) sgrid.set(k, (l = [])); l.push(st);
+    }
+  }
+  const inStreet = (x: number, z: number) => (sgrid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((st) => nearLine(st.pts, x, z, Math.max(2.5, st.w / 2 - 2.6)));
+  const open = areas.filter((a) => a.kind !== 'water');
+  const water = areas.filter((a) => a.kind === 'water');
+  const inAny = (as: Area[], x: number, z: number) => as.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)));
+  let n = 0;
+  for (const raw of blockOutlines(mask, 250)) {
+    // The blur and the closing grow the map's blocks by a metre or
+    // two past the building line; take the frontage that far in.
+    const ring = inset(straighten(orient(simplify(raw, 1.5), true), 0.45, 2.5), 1.8);
+    const box = obb(ring);
+    const maxDepth = Math.min(12.5, box.b * 0.9);
+    if (maxDepth < 5) continue;
+    const m = ring.length / 2;
+    for (let e = 0; e < m; e++) {
+      const p = (e + m - 1) % m, q = (e + 1) % m;
+      const ax = ring[2 * e]!, az = ring[2 * e + 1]!, bx2 = ring[2 * q]!, bz2 = ring[2 * q + 1]!;
+      const px = ring[2 * p]!, pz = ring[2 * p + 1]!;
+      const dx = bx2 - ax, dz = bz2 - az, L = Math.hypot(dx, dz);
+      if (L < 6) continue;
+      const ux = dx / L, uz = dz / L, ix = -uz, iz = ux;   // along, inward
+      // A convex corner at the start belongs to the previous edge's last
+      // parcel, which runs to its end and a house deep: start past it.
+      const pl = Math.hypot(ax - px, az - pz) || 1;
+      const sinTurn = ((ax - px) * dz - (az - pz) * dx) / (pl * L);
+      const s0 = sinTurn > 0.7 ? Math.min(maxDepth, L * 0.5) : 0;
+      const len = L - s0;
+      if (len < 5) continue;
+      const seed = hashStr(`${Math.round(ax)},${Math.round(az)}`);
+      const target = 10 + (seed % 7);
+      const k = Math.max(1, Math.round(len / target));
+      for (let i = 0; i < k; i++) {
+        const t0 = s0 + (len * i) / k, t1 = s0 + (len * (i + 1)) / k;
+        const ps = hashStr(`${e}:${i}:${seed}`);
+        const depth = maxDepth * (0.85 + 0.15 * ((ps >>> 3) % 7) / 6);
+        const f0x = ax + ux * t0, f0z = az + uz * t0, f1x = ax + ux * t1, f1z = az + uz * t1;
+        // samples a step inside the frontage: any one built, water or open means no house
+        let skip = !inside(hist.town, (f0x + f1x) / 2 + ix * depth / 2, (f0z + f1z) / 2 + iz * depth / 2);
+        for (const f of [0.15, 0.5, 0.85]) for (const d of [1.5, 4, depth * 0.85]) {
+          const sx = f0x + (f1x - f0x) * f + ix * d, sz = f0z + (f1z - f0z) * f + iz * d;
+          if (built(sx, sz) || inStreet(sx, sz) || inAny(water, sx, sz) || inAny(open, sx, sz) || !mask.at(sx, sz)) skip = true;
+        }
+        if (skip) continue;
+        const outer = orient([f0x, f0z, f1x, f1z, f1x + ix * depth, f1z + iz * depth, f0x + ix * depth, f0z + iz * depth].map(round), true);
+        if (Math.abs(area(outer)) < 20) continue;
+        const levels = ps % 5 < 3 ? 3 : 2;
+        const storey = 3.3 + (ps % 3) * 0.1;
+        const roof: RoofShape = ps % 10 < 3 ? 'mansard' : 'gabled';
+        buildings.push({
+          id: `mtb${n++}`, src: 'mtb', outer,
+          eave: round(levels * storey + 0.6), roofH: round(depth * (roof === 'mansard' ? 0.42 : 0.48)), roof,
+          ridge: Math.atan2(uz, ux), storey,
+          colour: PLASTER[(ps >>> 5) % PLASTER.length]!, roofColour: (ps >>> 9) % 6 === 0 ? '#555a60' : '#9b4f37',
+        });
+        stats.mtb++;
+      }
+    }
+  }
+}
+
 /* ── Walls, rails, trees ─────────────────────────────────────── */
 const walls: Wall[] = [];
 for (const f of ohm.feats) {
@@ -486,11 +496,55 @@ for (const f of ohm.feats) {
   if (r === 'rail' || r === 'light_rail') rails.push({ pts: flat(f.line), kind: 'rail' });
   else if (r === 'tram') rails.push({ pts: flat(f.line), kind: 'tram' });
 }
+// Today's trees, except those standing on a carriageway of the year
+// (the pedestrian zones' plantings) or on a building of the year.
+const carriageways = streets.filter((st) => st.kind === 'main' || st.kind === 'street' || st.kind === 'bridge');
 const trees: Tree[] = [];
 for (const p of osm.points) {
   if (p.tags.natural !== 'tree' || !inBounds(p.p)) continue;
+  if (carriageways.some((st) => nearLine(st.pts, p.p[0], p.p[1], st.w / 2 - 2.6))) continue;
+  if (buildings.some((b) => inside(b.outer, p.p[0], p.p[1]))) continue;
   const seed = hashStr(p.id);
   trees.push({ x: round(p.p[0]), z: round(p.p[1]), h: 9 + (seed % 9), r: 2.8 + (seed % 5) * 0.5 });
+}
+
+/* ── Gas lanterns ─────────────────────────────────────────────────
+   Potsdam's streets were lit by gas in 1900. A lantern every 32 m
+   along each street, alternating sides, at the kerb (a metre inside
+   the pavement's outer edge is the house front; the kerb is where the
+   carriageway meets the pavement). None in water, on bridges, or
+   inside a building. */
+const lamps: Lamp[] = [];
+{
+  const G = 25, grid = new Map<string, Building[]>();
+  for (const b of buildings) {
+    const [x0, z0, x1, z1] = bbox(b.outer);
+    for (let i = Math.floor(x0 / G); i <= Math.floor(x1 / G); i++) for (let j = Math.floor(z0 / G); j <= Math.floor(z1 / G); j++) {
+      const k = i + ',' + j; let l = grid.get(k); if (!l) grid.set(k, (l = [])); l.push(b);
+    }
+  }
+  const builtAt = (x: number, z: number) => (grid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((b) => inside(b.outer, x, z));
+  const water = areas.filter((a) => a.kind === 'water');
+  const taken: [number, number][] = [];
+  for (const st of streets) {
+    if (st.kind !== 'main' && st.kind !== 'street') continue;
+    if (!st.pts.some((_, i) => i % 2 === 0 && inside(hist.town, st.pts[i]!, st.pts[i + 1]!))) continue;
+    const off = st.w / 2 - 2.0;
+    let acc = 16, side = (hashStr(st.pts.slice(0, 2).join()) & 1) ? 1 : -1;
+    for (let i = 2; i < st.pts.length; i += 2) {
+      const ax = st.pts[i - 2]!, az = st.pts[i - 1]!, bx = st.pts[i]!, bz = st.pts[i + 1]!;
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.01) continue;
+      const ux = (bx - ax) / L, uz = (bz - az) / L;
+      while (acc < L) {
+        const x = ax + ux * acc - uz * off * side, z = az + uz * acc + ux * off * side;
+        const ok = !builtAt(x, z) && !water.some((a) => inside(a.outer, x, z)) && taken.every(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 > 14 * 14);
+        if (ok) { lamps.push({ x: round(x), z: round(z) }); taken.push([x, z]); }
+        acc += 32; side = -side;
+      }
+      acc -= L;
+    }
+  }
 }
 
 /* ── Labels ───────────────────────────────────────────────────── */
@@ -520,7 +574,7 @@ const city: City = {
   streets: streets.filter((s) => keepRing(s.pts)),
   walls: walls.filter((w) => keepRing(w.pts)),
   rails: rails.filter((r) => keepRing(r.pts)),
-  trees, columns, labels,
+  trees, columns, lamps, labels,
   water: hist.water,
   credits: hist.credits,
 };

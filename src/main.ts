@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { buildBuildings } from './city/buildings';
 import { buildGround } from './city/ground';
-import { buildColumns, buildTrees, buildWalls } from './city/props';
+import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
@@ -28,6 +28,8 @@ scene.add(buildBuildings(city.buildings));
 scene.add(buildTrees(city));
 scene.add(buildWalls(city));
 scene.add(buildColumns(city));
+scene.add(buildLamps(city));
+scene.add(buildRails(city));
 const segs = buildSegs(city);
 // The sky through the environment map is the ambient light: about
 // a fifth of the sun's on a clear afternoon, which 0.7 gives here.
@@ -119,7 +121,9 @@ renderer.setAnimationLoop(() => {
   yawObj.position.set(walker.x + Math.cos(walker.yaw) * walker.sway, walker.y, walker.z - Math.sin(walker.yaw) * walker.sway);
   yawObj.rotation.y = walker.yaw;
   pitchObj.rotation.x = walker.pitch;
-  updateSun(LAT);
+  const alt = updateSun(LAT);
+  // the lamplighter comes round as the sun goes down
+  lampGlow.value = THREE.MathUtils.smoothstep(-alt, -0.05, 0.08);
   updateEnv();
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;

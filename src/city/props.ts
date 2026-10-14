@@ -141,3 +141,70 @@ export function buildColumns(city: City) {
   for (const x of [shaft, plinth, capital]) { x.castShadow = x.receiveShadow = true; group.add(x); }
   return group;
 }
+
+/* Gas lanterns: a cast-iron post with a four-sided lantern on top,
+   whose glass glows when the light goes (lampGlow, set from the sun). */
+export const lampGlow = { value: 0 };
+export function buildLamps(city: City) {
+  const group = new THREE.Group();
+  group.name = 'lamps';
+  const n = city.lamps.length;
+  if (!n) return group;
+  const iron = new THREE.MeshStandardMaterial({ color: 0x23282a, roughness: 0.6, metalness: 0.5 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0xd8d0b0, roughness: 0.2, emissive: 0xffb45a, emissiveIntensity: 0 });
+  glass.onBeforeCompile = (sh) => {
+    sh.uniforms.uGlow = lampGlow;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.7, 0.35) * uGlow * 6.0;');
+  };
+  glass.customProgramCacheKey = () => 'lampglass';
+  const parts: [THREE.BufferGeometry, THREE.Material][] = [
+    [new THREE.CylinderGeometry(0.05, 0.09, 3.1, 8).translate(0, 1.55, 0), iron],
+    [new THREE.CylinderGeometry(0.14, 0.17, 0.5, 8).translate(0, 0.25, 0), iron],
+    [new THREE.CylinderGeometry(0.06, 0.06, 0.12, 6).translate(0, 3.12, 0), iron],
+    [new THREE.CylinderGeometry(0.24, 0.14, 0.55, 4, 1).rotateY(Math.PI / 4).translate(0, 3.45, 0), glass],
+    [new THREE.ConeGeometry(0.3, 0.3, 4).rotateY(Math.PI / 4).translate(0, 3.87, 0), iron],
+  ];
+  const m = new THREE.Matrix4();
+  for (const [g, mat] of parts) {
+    const inst = new THREE.InstancedMesh(g, mat, n);
+    city.lamps.forEach((l, i) => inst.setMatrixAt(i, m.makeTranslation(l.x, 0, l.z)));
+    inst.castShadow = mat === iron;
+    group.add(inst);
+  }
+  return group;
+}
+
+/* Rails: two steel strips per track, set flush in the ground (the
+   horse tram's in the setts, the railway's on its ballast). Standard
+   gauge, 1435 mm. */
+export function buildRails(city: City) {
+  const pos: number[] = [], nrm: number[] = [];
+  const G = 1.435 / 2, W = 0.035;
+  for (const r of city.rails) {
+    const p = r.pts;
+    for (let i = 2; i < p.length; i += 2) {
+      const ax = p[i - 2]!, az = p[i - 1]!, bx = p[i]!, bz = p[i + 1]!;
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.01) continue;
+      const nx = -(bz - az) / L, nz = (bx - ax) / L;
+      for (const off of [-G, G]) {
+        const q = (o: number) => [ax + nx * o, az + nz * o, bx + nx * o, bz + nz * o];
+        const [x0, z0, x1, z1] = q(off - W), [x2, z2, x3, z3] = q(off + W);
+        // two triangles facing up
+        for (const [x, z] of [[x0, z0], [x3, z3], [x1, z1], [x0, z0], [x2, z2], [x3, z3]] as [number, number][]) {
+          pos.push(x, 0.012, z); nrm.push(0, 1, 0);
+        }
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  const mat = new THREE.MeshStandardMaterial({ color: 0x8c8f92, roughness: 0.25, metalness: 0.9, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.receiveShadow = true;
+  mesh.name = 'rails';
+  return mesh;
+}

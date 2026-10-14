@@ -56,6 +56,8 @@ export interface Tree { x: number; z: number; h: number; r: number }
 // A column: a shaft of radius r from base to base + h, with a plinth
 // and a capital; porticos, colonnades and the drums of domes.
 export interface Column { x: number; z: number; r: number; h: number; base: number }
+// A gas lantern on its post, on the pavement's kerb side.
+export interface Lamp { x: number; z: number }
 export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square' }
 
 export interface City {
@@ -72,6 +74,7 @@ export interface City {
   rails: Rail[];
   trees: Tree[];
   columns: Column[];
+  lamps: Lamp[];
   labels: Label[];
   water: number;                                    // the Havel's level, m (negative: below the streets)
   credits: string[];
