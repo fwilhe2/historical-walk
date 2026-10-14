@@ -28,6 +28,16 @@ export const POTSDAM: History = {
   // Where no OHM street of 1900 lies along today's, these renamings
   // (post-1918 and post-1945 names back to the old ones) apply. Only
   // certain ones; the rest keep today's name rather than a guess.
+  // The old town south of the canal: "the area between the Havel, the
+  // Alter Markt and the Bassinplatz was hit hardest" on 14 April 1945,
+  // only four buildings of the Alter Markt's ensemble survived, and the
+  // quarter was rebuilt in the 1960s–70s to another plan (potsdam.de,
+  // "Alter Markt"; de.wikipedia, "Luftangriff auf Potsdam"). Bounded
+  // here, conservatively, by the canal on the north.
+  lost: [{
+    name: 'Altstadt',
+    ring: [-60, -90, -140, -198, 780, -446, 790, -200, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -60, 40],
+  }],
   rename: {
     'Am Alten Markt': 'Alter Markt',
     'Am Neuen Markt': 'Neuer Markt',

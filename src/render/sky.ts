@@ -29,7 +29,7 @@ sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 export const hemi = new THREE.HemisphereLight(0xfff0dc, 0xb59a78, 0.3);
 scene.add(hemi);
-scene.fog = new THREE.FogExp2(0xc9d3dc, 0.0011);
+scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00065);
 
 export const SUN_DIR = new THREE.Vector3();
 export const sunState = { hour: 17.5, day: 172 };   // day of year (21 June)

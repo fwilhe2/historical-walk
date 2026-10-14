@@ -21,6 +21,10 @@ export interface History {
   squares: { name: string; ring: number[] }[];
   canalWidth: Record<string, number>;               // m between quay walls, by OHM name
   rename: Record<string, string>;                    // today's street name → the year's, where OHM has none
+  // Quarters destroyed and rebuilt to a new plan after the year: an
+  // undated building in one is taken for a later one whatever it looks
+  // like; dated survivors and landmarks stay.
+  lost: { name: string; ring: number[] }[];
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };

@@ -157,7 +157,7 @@ const ohmAlive = ohmBuildings.filter((f) => aliveIn(f.tags, YEAR));
 const ohmLater = ohmBuildings.filter((f) => (year(f.tags.start_date) ?? -Infinity) > YEAR);
 const covers = (fs: Feature[], x: number, z: number) => fs.some((f) => f.outer.some((r) => inside(flat(r), x, z)));
 
-const stats = { osmDated: 0, osmUndated: 0, osmDroppedLater: 0, osmDroppedOhm: 0, osmDroppedMask: 0, ohm: 0, mtb: 0 };
+const stats = { osmDated: 0, osmUndated: 0, osmDroppedLater: 0, osmDroppedOhm: 0, osmDroppedMask: 0, osmDroppedLost: 0, ohm: 0, mtb: 0 };
 for (const f of osm.feats) {
   const t = f.tags;
   if (!f.closed || !t.building || t['building:part'] || SKIP_BUILDING.has(t.building)) continue;
@@ -169,6 +169,7 @@ for (const f of osm.feats) {
   if (covers(ohmAlive, cx, cz)) { stats.osmDroppedOhm++; continue; }   // OHM has the 1900 building here
   if (y === undefined) {
     if (covers(ohmLater, cx, cz)) { stats.osmDroppedLater++; continue; }
+    if (hist.lost.some((z) => inside(z.ring, cx, cz))) { stats.osmDroppedLost++; continue; }
     // Undated: kept where the historical map has the ground built up,
     // and when it does not look like a building of after 1900 (five
     // storeys and up, or a flat roof over three) — the slabs of the
