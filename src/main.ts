@@ -102,6 +102,7 @@ if (probe) {
       if (v.t !== undefined) sunState.hour = v.t;
       walker.fly = v.y !== undefined;
       if (v.y !== undefined) walker.flyY = walker.y = v.y;
+      hud.refresh();
       await this.frames(3);
     },
     state() {

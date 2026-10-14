@@ -124,6 +124,7 @@ export interface Landmark {
   at: [number, number];           // a point inside the mapped footprint it replaces
   front: number;                  // bearing its front faces, degrees
   build(P: Parts, ring: Ring): void;
+  about?: string;                 // a sentence or two for the HUD, from the cited sources
   // Remove every other building whose centre is inside this ring
   // (local metres) — parts of the same landmark mapped separately.
   clear?: Ring;

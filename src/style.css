@@ -25,6 +25,8 @@ canvas { display: block; }
 .chip { font: 600 9.5px/1 var(--sans); letter-spacing: .14em; padding: 3px 6px 2px; border: 1px solid currentColor; border-radius: 2px; color: var(--accent); }
 #h-street { font: italic 17px/1.25 var(--serif); color: var(--fg); }
 #h-near { font: 12px/1.35 var(--serif); color: var(--accent2); min-height: 16px; margin: 3px 0 8px; }
+#h-about { font: 12px/1.45 var(--serif); color: var(--fg2); margin: -2px 0 9px; }
+#h-about:empty { display: none; }
 #place dl { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 2px; align-items: baseline; }
 #place .row { display: contents; }
 #place dt { font: 600 9.5px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }

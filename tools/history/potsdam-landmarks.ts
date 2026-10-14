@@ -15,7 +15,7 @@ export const LANDMARKS: Landmark[] = [
        Straße with the main portal. The nave behind, a transverse
        hall with a steep hipped roof about 17 m high (de.wikipedia,
        "Garnisonkirche (Potsdam)"). Stage sizes are estimates. */
-    id: 'garnisonkirche', name: 'Garnisonkirche', year: 1735, at: [-452, -35], front: 180,
+    id: 'garnisonkirche', about: "Built 1730–35 to Philipp Gerlach's design for the garrison; its carillon played from the 88 m tower. Frederick William I and Frederick the Great were buried here. Burnt out on 14 April 1945, demolished 1968.", name: 'Garnisonkirche', year: 1735, at: [-452, -35], front: 180,
     build(P, ring) {
       const F = P.F, f = F.front - 7;
       P.footprint(ring, 0, 15, { colour: PLASTER, roof: 'hipped', roofH: 15, roofColour: SLATE, kind: 'church', storey: 7.5 });
@@ -35,7 +35,7 @@ export const LANDMARKS: Landmark[] = [
        on cast iron; lantern 14.5 m; 77 m to the cross. Portico of six
        Corinthian columns to the Alter Markt (south), apse to the
        north (de.wikipedia, "Nikolaikirche (Potsdam)"). */
-    id: 'nikolaikirche', name: 'St. Nikolaikirche', year: 1850, at: [30, -110], front: 180,
+    id: 'nikolaikirche', about: "Karl Friedrich Schinkel's church, built 1830–37; the dome on its colonnaded drum followed 1843–50 under Persius and Stüler. 77 m to the cross.", name: 'St. Nikolaikirche', year: 1850, at: [30, -110], front: 180,
     build(P) {
       const s = { colour: SANDSTONE, kind: 'church' as const, wall: 'stone' as const, storey: 9 };
       P.box(0, 0, 30, 30, 0, 27, s);
@@ -58,7 +58,7 @@ export const LANDMARKS: Landmark[] = [
        figures; a drum with eight windows and a stepped copper cupola
        carrying the gilded Atlas with the globe (de.wikipedia, "Altes
        Rathaus (Potsdam)"). Heights estimated. */
-    id: 'rathaus', name: 'Altes Rathaus', year: 1755, at: [106, -79], front: 285,
+    id: 'rathaus', about: 'The town hall, 1753–55, by Jan Bouman after a Palladian model; a gilded Atlas carries the globe on its cupola.', name: 'Altes Rathaus', year: 1755, at: [106, -79], front: 285,
     build(P, ring) {
       P.footprint(ring, 0, 18, { colour: '#dccfae', kind: 'public', storey: 6.5 });
       P.ngon(0, 0, 4.4, 8, 18, 25, { colour: SANDSTONE, wall: 'stone', storey: 6 });
@@ -72,7 +72,7 @@ export const LANDMARKS: Landmark[] = [
        a Greek cross about 65 × 38 m, and a 64 m campanile after San
        Zeno in Verona closing the view down the Brandenburger Straße
        from the west (de.wikipedia, "St. Peter und Paul (Potsdam)"). */
-    id: 'peterpaul', name: 'St. Peter und Paul', year: 1870, at: [-49, -639], front: 270,
+    id: 'peterpaul', about: 'The Catholic parish church, 1867–70, by Wilhelm Salzenberg after a design by Friedrich August Stüler; its campanile follows San Zeno in Verona.', name: 'St. Peter und Paul', year: 1870, at: [-49, -639], front: 270,
     build(P, ring) {
       const brick = { colour: '#d4b878', wall: 'brick' as const, kind: 'church' as const, storey: 8 };
       P.footprint(ring, 0, 16, { ...brick, roof: 'hipped', roofH: 8, roofColour: SLATE });
@@ -87,7 +87,7 @@ export const LANDMARKS: Landmark[] = [
        nave 13.6 m wide, plain plaster with pilaster strips (Residenz
        Heilig Geist Park, church history; de.wikipedia). Stage
        heights estimated. */
-    id: 'heiliggeist', name: 'Heilig-Geist-Kirche', year: 1734, at: [670, -194], front: 280,
+    id: 'heiliggeist', about: 'Nave 1726–28 by Pierre de Gayette, tower 1734 by Johann Friedrich Grael, 86 m over the Havel. Burnt 1945; the nave was pulled down in 1961, the tower blown up in 1974.', name: 'Heilig-Geist-Kirche', year: 1734, at: [670, -194], front: 280,
     build(P, ring) {
       const f = P.F.front - 6.2;
       P.footprint(ring, 0, 15, { colour: PLASTER, kind: 'church', roof: 'hipped', roofH: 8, roofColour: COPPER, storey: 7.5 });
@@ -101,7 +101,7 @@ export const LANDMARKS: Landmark[] = [
   {
     /* Französische Kirche, Knobelsdorff and Boumann 1752–53: a small
        oval domed temple on the Bassinplatz. Heights estimated. */
-    id: 'franzkirche', name: 'Französische Kirche', year: 1753, at: [149, -586], front: 270,
+    id: 'franzkirche', about: "The Huguenot congregation's church, 1752–53, by Jan Bouman after Knobelsdorff: a small oval temple under a dome.", name: 'Französische Kirche', year: 1753, at: [149, -586], front: 270,
     build(P, ring) {
       P.footprint(ring, 0, 9.5, { colour: '#e2d8c2', kind: 'church', storey: 7, roof: 'dome', roofH: 6.5, roofColour: SLATE });
     },
@@ -112,7 +112,7 @@ export const LANDMARKS: Landmark[] = [
        gilded Fortuna on the dome in the middle of the north front to
        the Alter Markt. Wall and portal heights estimated from the
        2013 reconstruction of its outer shape. */
-    id: 'stadtschloss', name: 'Stadtschloss', year: 1752, at: [-1, 34], front: 0,
+    id: 'stadtschloss', about: "The Hohenzollerns' town palace, remodelled by Georg Wenzeslaus von Knobelsdorff 1744–52; the Fortunaportal of 1701 faces the Alter Markt. Burnt out 1945, demolished 1959–60.", name: 'Stadtschloss', year: 1752, at: [-1, 34], front: 0,
     build(P, ring) {
       P.footprint(ring, 0, 18, { colour: '#d8b09c', kind: 'palace', roof: 'hipped', roofH: 6, roofColour: COPPER, storey: 5.6 });
       const f = P.F.front - 4;
@@ -126,7 +126,7 @@ export const LANDMARKS: Landmark[] = [
     /* Brandenburger Tor, Gontard and Unger 1770: a triumphal arch with
        one carriage arch and, since 1843, a footway through each side.
        Proportions estimated; you can walk through. */
-    id: 'brandenburgertor', name: 'Brandenburger Tor', year: 1770, at: [-846, -473], front: 270,
+    id: 'brandenburgertor', about: 'A triumphal arch of 1770 by Carl von Gontard and Georg Christian Unger — the town side and the field side were designed differently.', name: 'Brandenburger Tor', year: 1770, at: [-846, -473], front: 270,
     build(P) {
       const s = { colour: '#e6dcc4', wall: 'stone' as const, windows: false as const };
       const W = P.F.left + P.F.right, D = Math.min(P.F.front + P.F.back, 8);
@@ -143,7 +143,7 @@ export const LANDMARKS: Landmark[] = [
        continent — two slender round towers with crenellations either
        side of a pointed arch, and a guardhouse wing on each side, all
        on the mapped outline (OSM). Heights estimated from photographs. */
-    id: 'nauenertor', name: 'Nauener Tor', year: 1755, at: [-190, -912], front: 0,
+    id: 'nauenertor', about: 'Built 1755 — one of the first neo-Gothic buildings on the European continent.', name: 'Nauener Tor', year: 1755, at: [-190, -912], front: 0,
     build(P, ring) {
       const s = { colour: '#dcc6a0', wall: 'stone' as const, kind: 'church' as const, storey: 4.6 };
       P.footprint(ring, 0, 9.5, s);
@@ -156,7 +156,7 @@ export const LANDMARKS: Landmark[] = [
   {
     /* Jägertor, 1733: two piers and a lintel carrying a hunting group
        — a stag brought down by hounds. Estimated. */
-    id: 'jaegertor', name: 'Jägertor', year: 1733, at: [-532, -808], front: 0,
+    id: 'jaegertor', about: "The hunters' gate of 1733, crowned by a stag brought down by hounds; the oldest of Potsdam's gates still standing.", name: 'Jägertor', year: 1733, at: [-532, -808], front: 0,
     build(P) {
       const W = P.F.left + P.F.right;
       const s = { colour: '#e0d4ba', wall: 'stone' as const, windows: false as const };

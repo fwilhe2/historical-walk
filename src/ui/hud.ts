@@ -46,6 +46,7 @@ export const hud = {
     order = c.labels.filter((l) => l.kind === 'landmark');
   },
   toggleClean() { $('hud').classList.toggle('clean'); },
+  refresh() { lookT = 0; },
   nextLandmark(_x: number, _z: number) {
     if (!order.length) return null;
     const l = order[next++ % order.length]!;
@@ -62,6 +63,14 @@ export const hud = {
     // today's institutions' names would be out of place; addresses are not
     const named = b && (b.src === 'ohm' || b.src === 'model') ? b.name : undefined;
     $('h-near').textContent = b ? (named ?? b.addr ?? '') : '';
+    // the story of a landmark within 60 m (its label sits at its centre)
+    let about = '', ad = 60 * 60;
+    for (const l of city.labels) {
+      if (!l.about) continue;
+      const d = (l.x - w.x) ** 2 + (l.z - w.z) ** 2;
+      if (d < ad) { ad = d; about = `${l.text}. ${l.about}`; }
+    }
+    $('h-about').textContent = about;
     $('h-bld').textContent = b ? (b.year ? `${b.year}` : 'before 1900') + ' · ' + srcName(b.src) : '—';
     const h = Math.floor(hour), m = Math.round((hour - h) * 60);
     $('h-time').textContent = `${String(h).padStart(2, '0')}:${String(m === 60 ? 0 : m).padStart(2, '0')}`;

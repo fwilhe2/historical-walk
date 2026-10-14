@@ -193,6 +193,7 @@ for (const b of buildings) Object.assign(b, hist.patch[b.id] ?? {});
    Each replaces the mapped footprint under its `at` point (and every
    other footprint whose centre falls inside that one) with its parts. */
 const columns: Column[] = [];
+const abouts = new Map<string, string>();
 for (const lm of hist.landmarks) {
   const hits = buildings.filter((b) => inside(b.outer, lm.at[0], lm.at[1]));
   if (!hits.length) { console.warn('landmark without footprint:', lm.id); continue; }
@@ -203,6 +204,7 @@ for (const lm of hist.landmarks) {
   for (let i = buildings.length - 1; i >= 0; i--) if (gone.has(buildings[i]!)) buildings.splice(i, 1);
   const P = new Parts(lm.id, frame(ring, lm.front), lm.name, lm.year);
   lm.build(P, ring);
+  if (lm.about) abouts.set(lm.name, lm.about);
   buildings.push(...P.list);
   columns.push(...P.columns);
 }
@@ -611,9 +613,13 @@ const labels: Label[] = [];
 // Names of the year only: OHM's and the landmarks'. OSM's names are
 // today's (ministries, galleries, shops) and stay off the labels.
 for (const b of buildings) {
-  if (!b.name || (b.src !== 'ohm' && b.src !== 'model')) continue;
+  // (and today's name of a building of the year that the history file describes)
+  if (!b.name || (b.src !== 'ohm' && b.src !== 'model' && !hist.about[b.name])) continue;
   const [x, z] = centroid(b.outer);
-  labels.push({ x: round(x), z: round(z), text: b.name, kind: 'landmark' });
+  const l: Label = { x: round(x), z: round(z), text: b.name, kind: 'landmark' };
+  const about = abouts.get(b.name) ?? hist.about[b.name];
+  if (about) l.about = about;
+  labels.push(l);
 }
 
 /* ── Check ─────────────────────────────────────────────────────── */

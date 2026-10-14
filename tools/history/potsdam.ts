@@ -25,6 +25,14 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  about: {
+    'Langer Stall': 'The guards\' exercise hall, 1734, rebuilt 1781 with Georg Christian Unger\'s portico toward the Breite Straße. Burnt 1945; only the portico stands today.',
+    'Marstall': 'The royal stables: built 1685 as an orangery, a stable from 1714, remodelled by Knobelsdorff in 1746 with horse-tamer groups on the roof.',
+    'Kommandantur': 'The garrison commander\'s house on the Lustgarten, 1819 on an older inn. Destroyed 1945.',
+    'Palast Barberini': 'A town palace of 1771–72 by Carl von Gontard after the Palazzo Barberini in Rome. Destroyed 1945, rebuilt 2013–16.',
+    'Königliches Schauspielhaus': 'The royal theatre of 1795 on the Canal, by Michael Philipp Boumann. Destroyed in 1945.',
+    'Großes Militär-Waisenhaus': 'The Great Military Orphanage, founded 1724, rebuilt 1771–78 by Carl von Gontard with its domed tower.',
+  },
   // Where no OHM street of 1900 lies along today's, these renamings
   // (post-1918 and post-1945 names back to the old ones) apply. Only
   // certain ones; the rest keep today's name rather than a guess.
