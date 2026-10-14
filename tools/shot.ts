@@ -37,9 +37,12 @@ try {
   log('ready');
   for (const [name, spec] of views) {
     // keys to press before the shot follow the hash after a bar
-    const [hash, keyList] = spec.split('|') as [string, string?];
+    const [hash, keySpec] = spec.split('|') as [string, string?];
+    // "KeyT@8": press, then let 8 s pass before the shot
+    const [keyList, waitS] = (keySpec ?? '').split('@') as [string, string?];
     await page.evaluate((h) => window.hw!.go(h), hash);
     for (const k of keyList ? keyList.split(',') : []) await page.keyboard.press(k as never);
+    if (waitS) await new Promise((ok) => setTimeout(ok, +waitS * 1000));
     await page.evaluate(() => window.hw!.frames(4));
     await page.screenshot({ path: path.join(out, name + '.png') as `${string}.png` });
     log('shot ' + name + ' ' + await page.evaluate(() => window.hw!.state()));

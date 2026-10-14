@@ -96,6 +96,17 @@ export class Parts {
     for (let k = 0; k < n; k++) { const t = (k + 0.5) / n * Math.PI * 2; pts.push(...this.F.at(u + a * Math.cos(t), f + b * Math.sin(t))); }
     return this.push(orientPos(pts), base, top, s);
   }
+  /* A round arch: the opening of width w centred at u, its crown at
+     `crown`, springing at crown − w/2, filled above in thin slices up
+     to `top`, d deep. */
+  arch(u: number, f: number, w: number, d: number, crown: number, top: number, s: PartStyle, n = 9) {
+    const r = w / 2, spring = crown - r;
+    for (let k = 0; k < n; k++) {
+      const a = -r + (k + 0.5) * w / n;
+      const y = spring + Math.sqrt(Math.max(0, r * r - a * a));
+      this.box(u + a, f, w / n + 0.02, d, y, top, s);
+    }
+  }
   /* The mapped footprint itself, as one part. */
   footprint(ring: Ring, base: number, top: number, s: PartStyle) { return this.push(orientPos(ring), base, top, s); }
   column(u: number, f: number, r: number, h: number, base = 0) {

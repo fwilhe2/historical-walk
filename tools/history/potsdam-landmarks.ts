@@ -142,11 +142,13 @@ export const LANDMARKS: Landmark[] = [
       const s = { colour: '#e6dcc4', wall: 'stone' as const, windows: false as const };
       const W = P.F.left + P.F.right, D = Math.min(P.F.front + P.F.back, 8);
       const k = W / 20.2;
-      const piers = [[-8.85, 2.5], [-4.4, 2.5], [4.4, 2.5], [8.85, 2.5]] as const;
-      for (const [u, w] of piers) P.box(u * k, 0, w * k, D, 0, 12, s);
-      for (const u of [-6.6, 6.6]) P.box(u * k, 0, 2.4 * k, D, 4.6, 12, s);   // over the footways
-      P.box(0, 0, 5.4 * k, D, 9.2, 12, s);                                     // over the arch
-      P.box(0, 0, W, D + 0.6, 12, 14.6, { ...s, colour: '#ddd2b8' });           // the attic
+      // four piers, the central arch (5.4 m, its crown at 9 m) and a
+      // footway each side (2 m, crown at 4.4 m), the attic over all
+      for (const [u, w] of [[-8.85, 2.5], [-4.4, 2.6], [4.4, 2.6], [8.85, 2.5]] as const) P.box(u * k, 0, w * k, D, 0, 12, s);
+      P.arch(0, 0, 6.2 * k, D, 9, 12, s);
+      for (const u of [-6.6, 6.6]) P.arch(u * k, 0, 1.95 * k, D, 4.4, 12, s, 5);
+      P.box(0, 0, W + 0.4, D + 0.6, 12, 12.6, { ...s, colour: '#ddd2b8' });   // cornice
+      P.box(0, 0, W, D, 12.6, 14.6, { ...s, colour: '#e2d7bf' });              // attic
     },
   },
   {
