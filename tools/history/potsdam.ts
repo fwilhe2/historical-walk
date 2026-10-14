@@ -25,6 +25,9 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  // The royal gardens round the town, all laid out before 1900.
+  regionParks: ['Park Sanssouci', 'Park Babelsberg', 'Neuer Garten', 'Glienicker Park', 'Schlossgarten Glienicke', 'Schlosspark Sacrow',
+    'Jagdschlosspark', 'Marlygarten', 'Sizilianischer Garten', 'Nordischer Garten', 'Paradiesgarten', 'Holländischer Garten'],
   about: {
     'Langer Stall': 'The guards\' exercise hall, 1734, rebuilt 1781 with Georg Christian Unger\'s portico toward the Breite Straße. Burnt 1945; only the portico stands today.',
     'Marstall': 'The royal stables: built 1685 as an orangery, a stable from 1714, remodelled by Knobelsdorff in 1746 with horse-tamer groups on the roof.',

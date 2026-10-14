@@ -45,7 +45,7 @@ export interface Building {
   ornate?: true;          // pilasters between the bays and a central risalit (baroque and classicist facades)
 }
 
-export type AreaKind = 'water' | 'park' | 'grass' | 'square' | 'garden' | 'yard' | 'sand' | 'cemetery' | 'rail';
+export type AreaKind = 'water' | 'park' | 'grass' | 'square' | 'garden' | 'yard' | 'sand' | 'cemetery' | 'rail' | 'wood';
 export interface Area { kind: AreaKind; outer: Ring; holes?: Ring[]; name?: string }
 
 export type StreetKind = 'main' | 'street' | 'lane' | 'path' | 'bridge' | 'footbridge';
@@ -67,6 +67,10 @@ export interface City {
   year: number;
   origin: [number, number];                        // lat, lon of (0, 0)
   bounds: [number, number, number, number];        // minX, minZ, maxX, maxZ
+  // The land round the town, coarsely (water, woods, the royal parks),
+  // over regionBounds; drawn beyond `bounds` only.
+  region: Area[];
+  regionBounds: [number, number, number, number];
   spawn: { x: number; z: number; yaw: number };
   buildings: Building[];
   areas: Area[];

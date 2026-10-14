@@ -63,6 +63,14 @@ lat/lon, and so in the local frame). It is used three ways:
    are the right massing in the right place. The HUD marks them
    "lost · from the 1903 map".
 
+### The land round the town
+
+Beyond the mapped box the Havel's lakes, the woods and the royal
+gardens (Sanssouci, Babelsberg, the Neuer Garten, Glienicke, Sacrow)
+are drawn coarsely from today's OSM (`bun run fetch potsdam region`):
+water cut into the ground, woods as canopy volumes. Today's woods
+stand for the woods of 1900; parks are kept only by name.
+
 ### Hand-made knowledge
 
 `tools/history/potsdam.ts` holds what no map says, each entry with its

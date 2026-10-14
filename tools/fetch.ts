@@ -135,8 +135,53 @@ async function historicalMap(spec: NonNullable<(typeof CITIES)[string]['map']>, 
   return PNG.sync.write(grey, { colorType: 0, inputColorType: 0, inputHasAlpha: false });
 }
 
+/* The land round the town, coarsely: water, woods and the old parks
+   in a box a few kilometres wider than the town's, from Overpass with
+   geometry. Kept as rings of [lat, lon] per feature. */
+async function region(bb: [number, number, number, number]) {
+  const b = bb.join(',');
+  const sel = ['way["natural"="water"]', 'relation["natural"="water"]', 'way["landuse"="forest"]', 'relation["landuse"="forest"]',
+    'way["natural"="wood"]', 'relation["natural"="wood"]', 'way["leisure"="park"]', 'relation["leisure"="park"]'];
+  const q = `[out:json][timeout:160];(${sel.map((x) => `${x}(${b});`).join('')});out geom qt;`;
+  console.log('region overpass');
+  const j = JSON.parse(await get('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: q }) })) as {
+    elements: { type: string; id: number; tags?: Tags; geometry?: { lat: number; lon: number }[]; members?: { role: string; geometry?: { lat: number; lon: number }[] }[] }[];
+  };
+  const out: { kind: string; name?: string; outer: number[][]; inner: number[][] }[] = [];
+  const flatLL = (g: { lat: number; lon: number }[]) => g.flatMap((p) => [+p.lat.toFixed(6), +p.lon.toFixed(6)]);
+  for (const e of j.elements) {
+    const t = e.tags ?? {};
+    const kind = t.natural === 'water' ? 'water' : t.leisure === 'park' ? 'park' : 'wood';
+    if (e.type === 'way' && e.geometry && e.geometry.length > 3) out.push({ kind, ...(t.name ? { name: t.name } : {}), outer: [flatLL(e.geometry)], inner: [] });
+    else if (e.members) {
+      // members as open lines; joined by matching end coordinates
+      const join = (role: string) => {
+        const parts = e.members!.filter((m) => (role === 'inner') === (m.role === 'inner') && m.geometry).map((m) => flatLL(m.geometry!));
+        const rings: number[][] = [];
+        while (parts.length) {
+          let cur = parts.pop()!;
+          for (let guard = 0; guard < 500; guard++) {
+            const n = cur.length;
+            if (cur[0] === cur[n - 2] && cur[1] === cur[n - 1]) break;
+            const i = parts.findIndex((p) => (p[0] === cur[n - 2] && p[1] === cur[n - 1]) || (p[p.length - 2] === cur[n - 2] && p[p.length - 1] === cur[n - 1]));
+            if (i < 0) break;
+            let p = parts.splice(i, 1)[0]!;
+            if (!(p[0] === cur[n - 2] && p[1] === cur[n - 1])) { const r: number[] = []; for (let k = p.length - 2; k >= 0; k -= 2) r.push(p[k]!, p[k + 1]!); p = r; }
+            cur = cur.concat(p.slice(2));
+          }
+          if (cur.length > 6) rings.push(cur);
+        }
+        return rings;
+      };
+      out.push({ kind, ...(t.name ? { name: t.name } : {}), outer: join('outer'), inner: join('inner') });
+    }
+  }
+  return out;
+}
+
 const which = process.argv[3];
 if (!which || which === 'osm') writeFileSync(`${dir}/osm.json`, JSON.stringify(await osm(city.bbox, 0.006)));
 if (!which || which === 'ohm') writeFileSync(`${dir}/ohm.json`, JSON.stringify(await ohm(city.bbox)));
+if ((!which || which === 'region') && city.region) writeFileSync(`${dir}/region.json`, JSON.stringify(await region(city.region)));
 if ((!which || which === 'map') && city.map) writeFileSync(`${dir}/${city.map.file}`, await historicalMap(city.map, city.bbox, city.origin));
 console.log('done');

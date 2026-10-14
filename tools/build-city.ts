@@ -10,7 +10,7 @@
      before the year; undated ones are judged by the historical
      map (tools/mask.ts) and by what OHM says stood on the spot.
    See README.md, "Where the city comes from". */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
 import { area, bbox, buffer, centroid, inside, inset, obb, orient, segDist2, simplify, straighten, type Ring } from '../src/geom/poly.ts';
@@ -262,12 +262,25 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
 for (const sq of hist.squares) areas.push({ kind: sq.kind ?? 'square', outer: orient(sq.ring, true), name: sq.name });
-// The 1903 map's built blocks: what is not building in them is yard,
+// The 1903 map's built blocks inside the town: what is not building in them is yard,
 // packed earth and paving; everything else unbuilt is garden (the
 // ground's default). Yards go first, so parks and squares paint over.
 if (mask) {
   const yards: Area[] = [];
-  for (const raw of blockOutlines(mask, 150)) yards.push({ kind: 'yard', outer: orient(simplify(raw, 1.5), true).map(round) });
+  for (const raw of blockOutlines(mask, 150)) {
+    const ring = orient(simplify(raw, 1.5), true).map(round);
+    // only in the closely built town: outside it the hatched blocks are
+    // villas in their gardens, most of whose houses are not drawn
+    // (a block straddling the town's line counts if most of it is inside)
+    const [x0, z0, x1, z1] = bbox(ring);
+    let n = 0, k = 0;
+    const st = Math.max(4, Math.min(x1 - x0, z1 - z0) / 8);
+    for (let x = x0 + st / 2; x < x1; x += st) for (let z = z0 + st / 2; z < z1; z += st) {
+      if (!inside(ring, x, z)) continue;
+      n++; if (inside(hist.town, x, z)) k++;
+    }
+    if (n && k / n > 0.85) yards.push({ kind: 'yard', outer: ring });
+  }
   areas.unshift(...yards);
 }
 // An undated building standing in a park or square of the year came later.
@@ -694,11 +707,42 @@ for (const b of buildings) {
   if (bad) throw new Error('bad building ' + JSON.stringify(b));
 }
 
+/* ── The land round the town ──────────────────────────────────────
+   Water, woods and the royal parks of today in a wider box, simplified
+   to 4 m. Only what lies at least partly outside the town's bounds
+   matters (inside, the detailed plan is drawn). Today's woods stand
+   for the woods of the year; parks only by name (history file). */
+const region: Area[] = [];
+let regionBounds: [number, number, number, number] = [bx0, bz0, bx1, bz1];
+if (spec.region && existsSync(`data/${id}/region.json`)) {
+  const raw = JSON.parse(readFileSync(`data/${id}/region.json`, 'utf8')) as { kind: string; name?: string; outer: number[][]; inner: number[][] }[];
+  const proj = (r: number[]) => { const o: number[] = []; for (let i = 0; i < r.length; i += 2) { const [x, z] = fwd(r[i]!, r[i + 1]!); o.push(round(x), round(z)); } return o.slice(0, -2); };
+  const outside = (r: number[]) => { for (let i = 0; i < r.length; i += 2) if (!inBounds([r[i]!, r[i + 1]!])) return true; return false; };
+  for (const f of raw) {
+    if (f.kind === 'park' && !hist.regionParks.includes(f.name ?? '')) continue;
+    for (const o of f.outer) {
+      const ring = orient(simplify(proj(o), 4), true);
+      if (ring.length < 6 || Math.abs(area(ring)) < 400 || !outside(ring)) continue;
+      const a: Area = { kind: f.kind === 'park' ? 'park' : f.kind === 'water' ? 'water' : 'wood', outer: ring };
+      const holes = f.inner.map((h) => orient(simplify(proj(h), 4), false)).filter((h) => h.length >= 6 && inside(ring, h[0]!, h[1]!));
+      if (holes.length) a.holes = holes;
+      if (f.name) a.name = f.name;
+      region.push(a);
+    }
+  }
+  const [s0, w0] = fwd(spec.region[2], spec.region[1]), [s1, w1] = fwd(spec.region[0], spec.region[3]);
+  regionBounds = [round(s0), round(w0), round(s1), round(w1)];
+  // parks first, then woods, then water: the order they are painted in
+  const order = { park: 0, wood: 1, water: 2 } as Record<string, number>;
+  region.sort((a, b) => (order[a.kind] ?? 0) - (order[b.kind] ?? 0));
+}
+
 /* ── Clip to bounds and write ─────────────────────────────────── */
 const keepRing = (r: Ring) => { for (let i = 0; i < r.length; i += 2) if (inBounds([r[i]!, r[i + 1]!])) return true; return false; };
 const city: City = {
   id, name: hist.name, year: YEAR, origin: spec.origin,
   bounds: [round(bx0), round(bz0), round(bx1), round(bz1)],
+  region, regionBounds,
   spawn: hist.spawn,
   buildings,
   areas: areas.filter((a) => keepRing(a.outer) || a.kind === 'water'),

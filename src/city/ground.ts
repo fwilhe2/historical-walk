@@ -102,13 +102,32 @@ export function buildGround(city: City): Ground {
     return (j * RES + i) * 4;
   };
 
-  // The plane reaches well past the mapped bounds, as plain fields.
-  const M = 1500;
-  const geo = new THREE.PlaneGeometry(W + 2 * M, H + 2 * M, 1, 1);
+  // Beyond the bounds, the region raster: R water, G wood, B park, at
+  // about 8 m a texel over the wider box.
+  const [r0, q0, r1, q1] = city.regionBounds;
+  const RW = r1 - r0, RH = q1 - q0, RR = 1024;
+  const cR = document.createElement('canvas');
+  cR.width = cR.height = RR;
+  const gr = cR.getContext('2d')!;
+  gr.setTransform(RR / RW, 0, 0, RR / RH, -r0 * RR / RW, -q0 * RR / RH);
+  gr.fillStyle = '#000'; gr.fillRect(r0, q0, RW, RH);
+  const RC: Record<string, string> = { water: '#f00', wood: '#0f0', park: '#00f' };
+  for (const ar of city.region) {
+    gr.beginPath();
+    for (const r of [ar.outer, ...(ar.holes ?? [])]) ring(gr, r);
+    gr.fillStyle = RC[ar.kind] ?? '#000';
+    gr.fill('evenodd');
+  }
+  const tR = new THREE.CanvasTexture(cR);
+  tR.flipY = false; tR.colorSpace = THREE.NoColorSpace;
+  // The plane covers the region and a little more, as plain fields.
+  const M = 600;
+  const geo = new THREE.PlaneGeometry(RW + 2 * M, RH + 2 * M, 1, 1);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(x0 + W / 2, 0, z0 + H / 2);
+  geo.translate(r0 + RW / 2, 0, q0 + RH / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
-  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, uB: { value: new THREE.Vector4(x0, z0, W, H) } };
+  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR },
+    uB: { value: new THREE.Vector4(x0, z0, W, H) }, uR: { value: new THREE.Vector4(r0, q0, RW, RH) } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     sh.vertexShader = sh.vertexShader
@@ -141,8 +160,8 @@ export function buildGround(city: City): Ground {
 }
 
 const GROUND_PARS = /* glsl */ `
-uniform sampler2D tA, tB, tC;
-uniform vec4 uB;
+uniform sampler2D tA, tB, tC, tR;
+uniform vec4 uB, uR;
 varying vec3 vW;
 float gH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float gN(vec2 p) {
@@ -161,7 +180,12 @@ const GROUND_MAP = /* glsl */ `
   vec2 wob = (vec2(gN(p * 0.9), gN(p * 0.9 + 17.0)) - 0.5) * 0.7 / uB.zw;
   vec3 A = texture2D(tA, tuv + wob).rgb, B = texture2D(tB, tuv + wob).rgb;
   bool inside = all(greaterThanEqual(tuv, vec2(0.0))) && all(lessThanEqual(tuv, vec2(1.0)));
-  if (!inside) { A = vec3(0.0, 0.0, 0.7); B = vec3(0.0); }
+  float wood = 0.0;
+  if (!inside) {
+    vec3 R = texture2D(tR, (p - uR.xy) / uR.zw + wob * uB.zw / uR.zw * 6.0).rgb;
+    A = vec3(0.0, 0.0, 0.7); B = vec3(R.r, 0.0, 0.0);
+    wood = smoothstep(0.3, 0.7, R.g);
+  }
   if (B.r > 0.5) discard;
   // sharpen: weights to near-binary with a soft edge a few cm wide
   vec3 sA = smoothstep(0.38, 0.62, A), sB = smoothstep(0.38, 0.62, B);
@@ -192,6 +216,8 @@ const GROUND_MAP = /* glsl */ `
   float wE = max(0.0, 1.0 - wS - wL - wG - wR - wV);
   float tot = wS + wL + wG + wR + wV + wE;
   vec3 col = (setts * wS + slabs * wL + grass * wG + rail * wR + gravel * wV + earth * wE) / tot;
+  // forest floor beyond the town: dark, needles and shade
+  col = mix(col, mix(vec3(0.03, 0.045, 0.02), vec3(0.06, 0.07, 0.03), gF(p * 0.3)), wood);
   float gRough = (0.85 * wS + 0.8 * wL + 0.97 * wG + 0.9 * wR + 0.95 * wV + 0.97 * wE) / tot;
   // a little relief on the setts: each stone domed
   vec3 gBump = vec3(0.0);

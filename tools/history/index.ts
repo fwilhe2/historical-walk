@@ -25,7 +25,8 @@ export interface History {
   // undated building in one is taken for a later one whatever it looks
   // like; dated survivors and landmarks stay.
   lost: { name: string; ring: number[] }[];
-  about: Record<string, string>;                     // HUD text for named buildings that are not modelled landmarks
+  about: Record<string, string>;
+  regionParks: string[];                             // parks of today that were parks in the year, by name                     // HUD text for named buildings that are not modelled landmarks
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };

@@ -15,8 +15,8 @@ export const waterTime = { value: 0 };
 export function buildWater(city: City, ground: Ground) {
   const group = new THREE.Group();
   group.name = 'water';
-  const [x0, z0, x1, z1] = city.bounds;
-  const M = 1500;
+  const [x0, z0, x1, z1] = city.regionBounds;
+  const M = 600;
   const geo = new THREE.PlaneGeometry(x1 - x0 + 2 * M, z1 - z0 + 2 * M, 1, 1);
   geo.rotateX(-Math.PI / 2);
   geo.translate((x0 + x1) / 2, city.water, (z0 + z1) / 2);

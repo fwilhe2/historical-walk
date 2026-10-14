@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import earcut from 'earcut';
 import type { City } from './types';
 
 /* ── Trees and walls ────────────────────────────────────────────
@@ -266,5 +267,65 @@ export function buildRails(city: City) {
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;
   mesh.name = 'rails';
+  return mesh;
+}
+
+/* ── Woods beyond the town ───────────────────────────────────────
+   Each wood of the region is a canopy volume: its outline stood up
+   14–20 m and closed with a lid, the lid and sides lumped and mottled
+   in the shader so the edge reads as tree crowns at a distance. A few
+   square kilometres of forest cost a few thousand triangles; nobody
+   walks into them (they are all beyond the mapped town). */
+export function buildWoods(city: City) {
+  const pos: number[] = [], nrm: number[] = [];
+  for (const a of city.region) {
+    if (a.kind !== 'wood' && a.kind !== 'park') continue;
+    const r = a.outer, H = a.kind === 'park' ? 14 : 19;
+    const n = r.length;
+    for (let i = 0, j = n - 2; i < n; j = i, i += 2) {
+      const ax = r[j]!, az = r[j + 1]!, bx = r[i]!, bz = r[i + 1]!;
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.1) continue;
+      const nx = (bz - az) / L, nz = -(bx - ax) / L;
+      // the sides lean in a little toward the top, like a forest edge
+      const tx = -nx * 3, tz = -nz * 3;
+      for (const [x, y, z] of [[ax, 0, az], [bx, 0, bz], [bx + tx, H, bz + tz], [ax, 0, az], [bx + tx, H, bz + tz], [ax + tx, H, az + tz]] as const) {
+        pos.push(x, y, z); nrm.push(nx, 0.3, nz);
+      }
+    }
+    const data = [...r], holes: number[] = [];
+    for (const h of a.holes ?? []) { holes.push(data.length / 2); data.push(...h); }
+    const tris = earcut(data, holes.length ? holes : null, 2);
+    for (let t = 0; t < tris.length; t += 3) {
+      for (const k of [tris[t]!, tris[t + 2]!, tris[t + 1]!]) { pos.push(data[2 * k]!, H, data[2 * k + 1]!); nrm.push(0, 1, 0); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.computeBoundingSphere();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2e4a1e, roughness: 0.95, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWw;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWw = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec3 vWw;
+      float wH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float wN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(wH(i), wH(i + vec2(1, 0)), f.x), mix(wH(i + vec2(0, 1)), wH(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec2 q = vWw.xz + vec2(vWw.y * 0.7);
+        float crowns = wN(q / 7.0) * 0.6 + wN(q / 2.3) * 0.4;
+        diffuseColor.rgb *= 0.55 + 0.7 * crowns;
+        diffuseColor.rgb *= mix(0.45, 1.0, smoothstep(0.0, 12.0, vWw.y));`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        vec2 qq = vWw.xz / 6.0;
+        vec3 bump = vec3(wN(qq + 0.1) - wN(qq - 0.1), 0.0, wN(qq + vec2(0.0, 0.1)) - wN(qq - vec2(0.0, 0.1))) * 2.5;
+        normal = normalize(normal + (viewMatrix * vec4(bump, 0.0)).xyz);`);
+  };
+  mat.customProgramCacheKey = () => 'woods';
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.receiveShadow = true;
+  mesh.name = 'woods';
   return mesh;
 }
