@@ -11,6 +11,7 @@ import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
 import { SUN_DIR, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
 import { hud, note } from './ui/hud';
 import { historicMap } from './ui/map';
+import { sound } from './audio/sound';
 import { parseView, viewHash } from './app/view';
 
 /* ── Boot ───────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ if (start?.y !== undefined) { walker.fly = true; walker.flyY = walker.y = start.
 /* ── Controls that act once ─────────────────────────────────────── */
 const overlay = document.getElementById('overlay')!;
 const lock = () => renderer.domElement.requestPointerLock();
-overlay.addEventListener('click', () => { overlay.classList.add('hidden'); lock(); });
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); sound.unlock(); lock(); });
 renderer.domElement.addEventListener('click', lock);
 document.addEventListener('pointerlockchange', () => {
   if (!document.pointerLockElement && !probe) overlay.classList.remove('hidden');
@@ -78,6 +79,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') { walker.fly = !walker.fly; if (walker.fly) walker.flyY = Math.max(walker.flyY, 40); note(walker.fly ? 'FLYING' : 'WALKING'); }
   if (e.code === 'KeyH') hud.toggleClean();
   if (e.code === 'KeyM') historicMap.toggle();
+  if (e.code === 'KeyN') note(sound.toggleMute() ? 'SOUND OFF' : 'SOUND ON');
   if (e.code === 'BracketRight') sunState.hour = Math.min(21.5, sunState.hour + 0.25);
   if (e.code === 'BracketLeft') sunState.hour = Math.max(4, sunState.hour - 0.25);
   if (e.code === 'KeyG') {
@@ -109,6 +111,34 @@ if (probe) {
   };
 }
 
+/* ── Sound's view of the town ──────────────────────────────────────
+   Steps as the walker lands them; birds by the trees within 35 m
+   (counted once a second); bells from the towers: the hours from the
+   Garnisonkirche, the quarters from St. Nikolai. Time runs at the
+   clock's own pace, so a long walk hears them. */
+const towers = Object.fromEntries(city.labels.filter((l) => l.kind === 'landmark').map((l) => [l.text, l]));
+let lastSteps = 0, treeT = 0, nearTrees = 0, lastQuarter = Math.floor(sunState.hour * 4);
+function stepSound(dt: number) {
+  if (walker.steps !== lastSteps) {
+    lastSteps = walker.steps;
+    if (!walker.fly) sound.step(ground.surface(walker.x, walker.z), Math.hypot(walker.vx, walker.vz));
+  }
+  if ((treeT -= dt) <= 0) {
+    treeT = 1;
+    nearTrees = 0;
+    for (const t of city.trees) if ((t.x - walker.x) ** 2 + (t.z - walker.z) ** 2 < 35 * 35) nearTrees++;
+  }
+  const surf = ground.surface(walker.x, walker.z);
+  sound.update(dt, nearTrees, surf === 'setts' || surf === 'slabs');
+  const q = Math.floor(sunState.hour * 4);
+  if (q !== lastQuarter) {
+    lastQuarter = q;
+    const dist = (name: string) => { const l = towers[name]; return l ? Math.hypot(l.x - walker.x, l.z - walker.z) : 600; };
+    if (q % 4 === 0) { const h = Math.floor(sunState.hour) % 12 || 12; sound.bell(h, dist('Garnisonkirche'), 196); }
+    else sound.bell(q % 4, dist('St. Nikolaikirche'), 330);
+  }
+}
+
 /* ── Loop ───────────────────────────────────────────────────────── */
 document.getElementById('boot')!.hidden = true;
 hud.show(city);
@@ -118,6 +148,8 @@ let hashT = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   stepWalker(dt, segs, ground, 0.0022);
+  if (!probe) sunState.hour = (sunState.hour + dt / 3600) % 24;
+  stepSound(dt);
   yawObj.position.set(walker.x + Math.cos(walker.yaw) * walker.sway, walker.y, walker.z - Math.sin(walker.yaw) * walker.sway);
   yawObj.rotation.y = walker.yaw;
   pitchObj.rotation.x = walker.pitch;
