@@ -71,6 +71,18 @@ export const POTSDAM: History = {
     // The Gloriette on the Bassinplatz (1739–1945, OHM): a garden
     // pavilion, not a house — blank walls under a small dome. Form
     // estimated.
+    // The Langer Stall, the guards' exercise hall: one tall hall, not
+    // a stable shed. Heights estimated from photographs.
+    'ohm:r2854733': { eave: 9.5, roof: 'hipped', roofH: 8, kind: 'public', storey: 9 },
+    // The Kutschpferdestall (1787–89, standing today): two storeys
+    // round its court under a mansard roof. Estimated.
+    'ohm:r2854909': { eave: 8.4, roof: 'mansard', roofH: 5, kind: 'house', storey: 3.9 },
+    // The Marstall: one tall storey of arched windows under a mansard,
+    // Knobelsdorff's horse-tamers on the roof. Estimated.
+    'ohm:r2854322': { eave: 8.5, roof: 'mansard', roofH: 5.5, kind: 'palace', storey: 7.9 },
+    // Gates drawn as buildings: stone, no windows.
+    'ohm:w201138821': { eave: 9, roof: 'flat', roofH: 0, windows: false, wall: 'stone', kind: 'gate', colour: '#e3d8c0' },
+    'ohm:r2856679': { windows: false, wall: 'stone', colour: '#e3d8c0' },
     'ohm:w200905633': { eave: 5.5, roof: 'dome', roofH: 3, windows: false, wall: 'stone', colour: '#e3d8c0', roofColour: '#6f9a85', kind: 'public' },
   },
 };

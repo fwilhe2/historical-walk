@@ -180,4 +180,24 @@ export const LANDMARKS: Landmark[] = [
       P.box(0, 0, 2.3, 2.3, 17.2, 17.3, { ...s, roof: 'pyramidal', roofH: 2.4, roofColour: '#d8cdb8' });
     },
   },
+  {
+    /* The Dampfmaschinenhaus for Sanssouci, Ludwig Persius 1841–43, a
+       pump house in the form of a mosque: a domed hall after the
+       Mezquita of Córdoba and the chimney as a minaret, 36 m (db
+       deutsche bauzeitung; potsdam-wiki gives 38 m). The minaret's
+       place on the footprint and the hall's heights are estimates. */
+    id: 'dampfmaschinenhaus', name: 'Dampfmaschinenhaus', year: 1843, at: [-1084, -106], front: 180,
+    about: 'The pump house that fed the fountains of Sanssouci, built 1841–43 by Ludwig Persius as a mosque, its chimney a 36 m minaret.',
+    build(P, ring) {
+      const s = { colour: '#d8b48a', wall: 'stone' as const, kind: 'church' as const, storey: 6 };
+      P.footprint(ring, 0, 9.5, s);
+      P.ngon(0, 0, 6.5, 16, 9.5, 13.5, { ...s, windows: false });
+      P.ngon(0, 0, 6.5, 16, 13.5, 13.7, { colour: '#c9a476', wall: 'stone', windows: false, roof: 'dome', roofH: 5.5, roofColour: '#b98d5c' });
+      const u = P.F.right - 2.2, f = P.F.front - 2.2;
+      P.ngon(u, f, 1.5, 12, 0, 27, { ...s, windows: false });
+      P.ngon(u, f, 2.2, 12, 27, 28.2, { ...s, windows: false });
+      P.ngon(u, f, 1.2, 12, 28.2, 33, { ...s, windows: false });
+      P.ngon(u, f, 1.25, 12, 33, 33.1, { colour: '#c9a476', wall: 'stone', windows: false, roof: 'dome', roofH: 3, roofColour: '#b98d5c' });
+    },
+  },
 ];
