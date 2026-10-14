@@ -101,8 +101,19 @@ function facadeMaterial() {
         float cor = smoothstep(cBot - aa, cBot + aa, y) * (1.0 - smoothstep(cTop - aa, cTop + aa, y));
         col = mix(col, plaster * 1.12 + 0.03, cor);
         col *= 1.0 - 0.35 * smoothstep(cBot - 0.12 - aa, cBot - 0.12 + aa, y) * (1.0 - smoothstep(cBot - aa, cBot + aa, y));
-        // storey bands on grand buildings
-        if (grand) {
+        // Per-building variety, from its seed: window proportions, the head
+        // of the windows (0 plain, 1 a little cornice above, 2 a segmental
+        // arch), a string course at each floor, a rusticated ground storey.
+        float vA = fHash(vec2(seed * 53.0, 1.7)), vB = fHash(vec2(seed * 71.0, 4.1)), vC = fHash(vec2(seed * 29.0, 8.3));
+        float head = vB < 0.45 ? 0.0 : vB < 0.8 ? 1.0 : 2.0;
+        bool course = vC < 0.45 || grand;
+        bool rustic = (ornate || grand) && vC > 0.6 && style < 0.5;
+        if (rustic && y > 0.6 && y < 0.6 + storey - 0.1) {
+          float g = abs(fract((y - 0.6) / 0.42) - 0.5) * 0.42;
+          col *= 1.0 - 0.2 * (1.0 - smoothstep(0.015, 0.03 + aa, g));
+        }
+        // storey bands
+        if (course && style < 0.5) {
           float fy = mod(y - 0.6, storey);
           col *= 1.0 - 0.12 * (smoothstep(0.0, aa * 2.0, fy) * (1.0 - smoothstep(0.18, 0.18 + aa * 2.0, fy)));
         }
@@ -147,8 +158,8 @@ function facadeMaterial() {
         float fy = y - 0.6;
         float si = floor(fy / storey);
         float ly = fy - si * storey;
-        float ww = church ? 1.8 : grand ? 1.35 : 1.1;
-        float wh = church ? storey * 0.75 : storey - 1.45;
+        float ww = church ? 1.8 : grand ? 1.35 : mix(1.0, 1.3, vA);
+        float wh = church ? storey * 0.75 : storey - mix(1.25, 1.65, vA);
         float wy0 = church ? storey * 0.15 : 0.95;
         // a window row only where the whole window fits below the cornice
         bool fits = !blank && !dormer && L > 2.0 && fy > 0.0 && 0.6 + si * storey + wy0 + wh < eave - 0.45;
@@ -190,9 +201,26 @@ function facadeMaterial() {
             inner = max(inner * step(p.y, b.y), arch * step(b.y, p.y));
             outer = max(outer * step(p.y, b.y + frame), (1.0 - smoothstep(r + frame - aa, r + frame + aa, length(p - c))) * step(b.y, p.y));
           }
+          if (!church && !door && head > 1.5) {
+            // a segmental head: the opening's top bowed up by 18 cm
+            float bow = 0.18 * (1.0 - (p.x * p.x) / (ww * ww * 0.25));
+            float inA = step(p.y, b.y + bow) * step(a.y, p.y) * step(abs(p.x), ww * 0.5);
+            float outA = step(p.y, b.y + bow + frame) * step(a.y - frame, p.y) * step(abs(p.x), ww * 0.5 + frame);
+            inner = max(inner, inA * fBox(p + par, a, b + vec2(0.0, bow), aa));
+            opening = max(opening, inA);
+            outer = max(outer, outA);
+            reveal = opening - inner;
+          }
           vec3 frameC = mix(plaster * 1.15, vec3(0.86, 0.84, 0.8), 0.6);
           col = mix(col, frameC, outer);
           col = mix(col, plaster * 0.55, reveal);
+          if (!church && !door && head > 0.5 && head < 1.5) {
+            // a small cornice over the window, with its shadow beneath
+            float cap = fBox(p, vec2(a.x - 0.25, b.y + frame + 0.04), vec2(b.x + 0.25, b.y + frame + 0.16), aa);
+            float capShadow = fBox(p, vec2(a.x - 0.2, b.y + frame), vec2(b.x + 0.2, b.y + frame + 0.04), aa);
+            col = mix(col, frameC * 1.05, cap);
+            col *= 1.0 - 0.3 * capShadow;
+          }
           // the sill below
           float sill = fBox(p, vec2(a.x - 0.18, a.y - 0.2), vec2(b.x + 0.18, a.y - 0.08), aa);
           col = mix(col, plaster * 0.8, sill * (door ? 0.0 : 1.0));
