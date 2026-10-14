@@ -6,6 +6,7 @@ import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, buildWood
 import { buildWater, waterTime } from './city/water';
 import { buildTraffic } from './city/traffic';
 import { buildPeople } from './city/people';
+import { buildBoats } from './city/boats';
 import { setTerrain } from './city/terrain';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
@@ -46,6 +47,8 @@ const traffic = buildTraffic(city);
 scene.add(traffic.group);
 const people = buildPeople(city);
 scene.add(people.group);
+const boats = buildBoats(city, ground);
+scene.add(boats.group);
 const segs = buildSegs(city);
 const tour = makeTour(city);
 // The sky through the environment map is the ambient light: about
@@ -128,7 +131,7 @@ if (probe) {
       await this.frames(3);
     },
     state() {
-      return JSON.stringify({ people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
+      return JSON.stringify({ boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -211,6 +214,7 @@ renderer.setAnimationLoop(() => {
   waterTime.value += dt;
   // under the probe, traffic and people hold still, so shots repeat
   traffic.step(probe ? 0 : dt);
+  boats.step(probe ? 0 : dt, city.water);
   people.step(probe ? 0 : dt, walker.x, walker.z, nightLight.value);
   cloudTime.value += dt;
   clouds.position.x = walker.x; clouds.position.z = walker.z;
