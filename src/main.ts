@@ -166,6 +166,7 @@ function stepSound(dt: number) {
   // hoofbeats of the nearest moving tram horse, four to a stride
   let hd = Infinity;
   for (const c of traffic.cars) if (c.wait <= 0) hd = Math.min(hd, Math.hypot(c.obj.position.x - walker.x, c.obj.position.z - walker.z));
+  for (const c of traffic.cabs) hd = Math.min(hd, Math.hypot(c.obj.position.x - walker.x, c.obj.position.z - walker.z));
   if (hd < 80 && (hoofT -= dt) <= 0) { hoofT = 0.18 + Math.random() * 0.06; sound.hoof(hd); }
   const surf = ground.surface(walker.x, walker.z);
   sound.update(dt, nearTrees, surf === 'setts' || surf === 'slabs');
