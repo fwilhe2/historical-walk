@@ -374,6 +374,8 @@ if (mask) {
       const k = i + ',' + j; let l = sgrid.get(k); if (!l) sgrid.set(k, (l = [])); l.push(st);
     }
   }
+  const fronts = (x: number, z: number) => (sgrid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((st) => nearLine(st.pts, x, z, st.w / 2 + 5))
+    || inAny(open.filter((a) => a.kind === 'square'), x, z);
   const inStreet = (x: number, z: number) => (sgrid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((st) => nearLine(st.pts, x, z, Math.max(2.5, st.w / 2 - 2.6)));
   const open = areas.filter((a) => a.kind !== 'water');
   const water = areas.filter((a) => a.kind === 'water');
@@ -411,6 +413,15 @@ if (mask) {
         const f0x = ax + ux * t0, f0z = az + uz * t0, f1x = ax + ux * t1, f1z = az + uz * t1;
         // samples a step inside the frontage: any one built, water or open means no house
         let skip = !inside(hist.town, (f0x + f1x) / 2 + ix * depth / 2, (f0z + f1z) / 2 + iz * depth / 2);
+        // a row house fronts a street or a square: something of the year's
+        // street network must lie just before its front, else this is the
+        // map's hatching round a yard or a garden, not a frontage
+        const mx = (f0x + f1x) / 2 - ix * 4, mz = (f0z + f1z) / 2 - iz * 4;
+        const fx = (f0x + f1x) / 2 - ix * 9, fz = (f0z + f1z) / 2 - iz * 9;
+        // (where the year's streets are not mapped — the lost old town —
+        // the map's own open ground before the front is the street)
+        const openGround = !mask.at(mx, mz) && !mask.at(fx, fz) && !inAny(water, mx, mz) && !inAny(open.filter((a) => a.kind !== 'square'), mx, mz);
+        if (!fronts(mx, mz) && !openGround) skip = true;
         for (const f of [0.15, 0.5, 0.85]) for (const d of [1.5, 4, depth * 0.85]) {
           const sx = f0x + (f1x - f0x) * f + ix * d, sz = f0z + (f1z - f0z) * f + iz * d;
           if (built(sx, sz) || inStreet(sx, sz) || inAny(water, sx, sz) || inAny(open, sx, sz) || !mask.at(sx, sz)) skip = true;
