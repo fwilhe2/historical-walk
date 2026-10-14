@@ -10,6 +10,7 @@ import { stepWalker, walker } from './player/walker';
 import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
 import { SUN_DIR, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
 import { hud, note } from './ui/hud';
+import { historicMap } from './ui/map';
 import { parseView, viewHash } from './app/view';
 
 /* ── Boot ───────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ addEventListener('keydown', (e) => {
   if (e.repeat && e.code !== 'BracketLeft' && e.code !== 'BracketRight') return;
   if (e.code === 'KeyF') { walker.fly = !walker.fly; if (walker.fly) walker.flyY = Math.max(walker.flyY, 40); note(walker.fly ? 'FLYING' : 'WALKING'); }
   if (e.code === 'KeyH') hud.toggleClean();
+  if (e.code === 'KeyM') historicMap.toggle();
   if (e.code === 'BracketRight') sunState.hour = Math.min(21.5, sunState.hour + 0.25);
   if (e.code === 'BracketLeft') sunState.hour = Math.max(4, sunState.hour - 0.25);
   if (e.code === 'KeyG') {
@@ -108,6 +110,7 @@ if (probe) {
 /* ── Loop ───────────────────────────────────────────────────────── */
 document.getElementById('boot')!.hidden = true;
 hud.show(city);
+historicMap.init(city);
 const clock = new THREE.Clock();
 let hashT = 0;
 renderer.setAnimationLoop(() => {
@@ -121,6 +124,7 @@ renderer.setAnimationLoop(() => {
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
   hud.update(dt, walker, sunState.hour, ground);
+  historicMap.draw(walker.x, walker.z, walker.yaw);
   if ((hashT += dt) > 1 && !probe) {
     hashT = 0;
     history.replaceState(null, '', viewHash(walker, sunState.hour));

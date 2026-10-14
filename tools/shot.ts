@@ -1,6 +1,6 @@
 /* Screenshots of views, for checking changes by eye.
 
-     node tools/shot.ts OUT_DIR 'name=#x=…&z=…&yaw=…' [more…] [--size=1280x720]
+     node tools/shot.ts OUT_DIR 'name=#x=…&z=…&yaw=…[|KeyM,KeyH]' [more…] [--size=1280x720]
 
    Starts a Vite dev server, opens the page in headless Firefox with
    ?probe (no overlay, no pointer lock), and for each view sets the
@@ -35,11 +35,16 @@ try {
   await page.goto(url + '?probe' + (views[0]?.[1] ?? ''));
   await page.waitForFunction(() => !!window.hw, { timeout: 180000 });
   log('ready');
-  for (const [name, hash] of views) {
+  for (const [name, spec] of views) {
+    // keys to press before the shot follow the hash after a bar
+    const [hash, keyList] = spec.split('|') as [string, string?];
     await page.evaluate((h) => window.hw!.go(h), hash);
+    for (const k of keyList ? keyList.split(',') : []) await page.keyboard.press(k as never);
     await page.evaluate(() => window.hw!.frames(4));
     await page.screenshot({ path: path.join(out, name + '.png') as `${string}.png` });
     log('shot ' + name + ' ' + await page.evaluate(() => window.hw!.state()));
+    // and release them again, so toggles do not carry into the next view
+    for (const k of keyList ? keyList.split(',') : []) await page.keyboard.press(k as never);
   }
 } finally {
   await browser.close();

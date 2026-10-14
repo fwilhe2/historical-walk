@@ -59,7 +59,9 @@ export const hud = {
     lookT = 0.4;
     $('h-street').textContent = nearestStreet(w.x, w.z) || (ground.surface(w.x, w.z) === 'grass' ? 'im Grünen' : '—');
     const b = nearestBuilding(w.x, w.z);
-    $('h-near').textContent = b ? (b.name ?? b.addr ?? '') : '';
+    // today's institutions' names would be out of place; addresses are not
+    const named = b && (b.src === 'ohm' || b.src === 'model') ? b.name : undefined;
+    $('h-near').textContent = b ? (named ?? b.addr ?? '') : '';
     $('h-bld').textContent = b ? (b.year ? `${b.year}` : 'before 1900') + ' · ' + srcName(b.src) : '—';
     const h = Math.floor(hour), m = Math.round((hour - h) * 60);
     $('h-time').textContent = `${String(h).padStart(2, '0')}:${String(m === 60 ? 0 : m).padStart(2, '0')}`;

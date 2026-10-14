@@ -480,8 +480,10 @@ for (const p of osm.points) {
 
 /* ── Labels ───────────────────────────────────────────────────── */
 const labels: Label[] = [];
+// Names of the year only: OHM's and the landmarks'. OSM's names are
+// today's (ministries, galleries, shops) and stay off the labels.
 for (const b of buildings) {
-  if (!b.name || b.src === 'mtb') continue;
+  if (!b.name || (b.src !== 'ohm' && b.src !== 'model')) continue;
   const [x, z] = centroid(b.outer);
   labels.push({ x: round(x), z: round(z), text: b.name, kind: 'landmark' });
 }
