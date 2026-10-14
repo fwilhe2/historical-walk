@@ -239,9 +239,17 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
 for (const sq of hist.squares) areas.push({ kind: 'square', outer: orient(sq.ring, true), name: sq.name });
+// The 1903 map's built blocks: what is not building in them is yard,
+// packed earth and paving; everything else unbuilt is garden (the
+// ground's default). Yards go first, so parks and squares paint over.
+if (mask) {
+  const yards: Area[] = [];
+  for (const raw of blockOutlines(mask, 150)) yards.push({ kind: 'yard', outer: orient(simplify(raw, 1.5), true).map(round) });
+  areas.unshift(...yards);
+}
 // An undated building standing in a park or square of the year came later.
 {
-  const open = areas.filter((a) => a.kind !== 'water' && a.kind !== 'rail');
+  const open = areas.filter((a) => a.kind !== 'water' && a.kind !== 'rail' && a.kind !== 'yard');
   for (let i = buildings.length - 1; i >= 0; i--) {
     const b = buildings[i]!;
     if (b.src !== 'osm' || b.year !== undefined) continue;
@@ -292,7 +300,8 @@ addStreets(osm.feats, false);
    post-war town cut new roads through old blocks or over new bridges:
    a street running mostly over the 1903 map's built blocks is one of
    those, and so is a bridge with no bridge of the year near it. */
-const streetStats = { dropped: 0, bridgesDropped: 0, bridgesAdded: 0, renamed: 0 };
+const streetStats = { dropped: 0, paths: 0, bridgesDropped: 0, bridgesAdded: 0, renamed: 0 };
+const greens = areas.filter((a) => a.kind === 'park' || a.kind === 'garden' || a.kind === 'cemetery' || a.kind === 'grass');
 /* Names of the year: an OSM street takes the name of an OHM street of
    1900 that runs along it (most of its length within 12 m), else a
    rename from the history file, else today's name. */
@@ -318,7 +327,14 @@ for (let i = streets.length - 1; i >= nOhm; i--) {
     if (!ohmBridges.some((o) => nearLine(o.pts, mx, mz, 25))) { streets.splice(i, 1); streetStats.bridgesDropped++; }
     continue;
   }
-  if (mask && st.kind !== 'path' && builtShare(st.pts) > 0.45) { streets.splice(i, 1); streetStats.dropped++; }
+  if (mask && st.kind !== 'path' && builtShare(st.pts) > 0.45) { streets.splice(i, 1); streetStats.dropped++; continue; }
+  // Today's footpaths are today's: pavements mapped as their own
+  // lines, station forecourts, the island's promenades. Only paths in
+  // a park, garden or cemetery of the year are kept.
+  if (st.kind === 'path') {
+    const [mx, mz] = midpoint(st.pts);
+    if (!greens.some((a) => inside(a.outer, mx, mz))) { streets.splice(i, 1); streetStats.paths++; }
+  }
 }
 function midpoint(p: number[]): [number, number] {
   let L = 0;
@@ -377,7 +393,7 @@ if (mask) {
   const fronts = (x: number, z: number) => (sgrid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((st) => nearLine(st.pts, x, z, st.w / 2 + 5))
     || inAny(open.filter((a) => a.kind === 'square'), x, z);
   const inStreet = (x: number, z: number) => (sgrid.get(Math.floor(x / G) + ',' + Math.floor(z / G)) ?? []).some((st) => nearLine(st.pts, x, z, Math.max(2.5, st.w / 2 - 2.6)));
-  const open = areas.filter((a) => a.kind !== 'water');
+  const open = areas.filter((a) => a.kind !== 'water' && a.kind !== 'yard');
   const water = areas.filter((a) => a.kind === 'water');
   const inAny = (as: Area[], x: number, z: number) => as.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)));
   let n = 0;
@@ -494,6 +510,38 @@ for (const c of canals) {
       }
     }
     flush();
+  }
+}
+// Parapets on every bridge, along both edges where the bridge is
+// over water: sandstone, a metre high, carried down past the deck
+// so the bridge's side shows from the bank.
+{
+  const water = areas.filter((a) => a.kind === 'water');
+  const wet = (x: number, z: number) => water.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)));
+  const bridges = streets.filter((st) => st.kind === 'bridge' || st.kind === 'footbridge');
+  for (const st of bridges) {
+    const b = buffer(st.pts, st.w / 2);
+    // an edge inside or against another bridge's deck is not an edge
+    // (OSM maps a wide bridge as carriageway and footways side by side)
+    const others = bridges.filter((o) => o !== st);
+    const deckBeyond = (x: number, z: number) => others.some((o) => nearLine(o.pts, x, z, o.w / 2 + 0.8));
+    for (const side of [b.left, b.right]) {
+      let run: number[] = [];
+      const flush = () => { if (run.length >= 4) walls.push({ pts: run.map(round), h: 1.0, t: 0.45, kind: 'parapet', base: -1.4 }); run = []; };
+      for (let i = 2; i < side.length; i += 2) {
+        const ax = side[i - 2]!, az = side[i - 1]!, bx = side[i]!, bz = side[i + 1]!;
+        const L = Math.hypot(bx - ax, bz - az), k = Math.max(1, Math.ceil(L));
+        for (let j = 0; j <= k; j++) {
+          if (j === 0 && run.length) continue;
+          const x = ax + (bx - ax) * j / k, z = az + (bz - az) * j / k;
+          // within 1.5 m of water along the edge, so the parapet runs onto the quay
+          if (deckBeyond(x, z)) { flush(); continue; }
+          if (wet(x, z) || wet(x + (bx - ax) / L * 1.5, z + (bz - az) / L * 1.5) || wet(x - (bx - ax) / L * 1.5, z - (bz - az) / L * 1.5)) run.push(x, z);
+          else flush();
+        }
+      }
+      flush();
+    }
   }
 }
 function nearLine(p: number[], x: number, z: number, d: number) {

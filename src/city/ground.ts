@@ -12,7 +12,8 @@ import type { City, Ring } from './types';
      earth (yards, verges) is whatever is left.
 
    Everything is painted opaque in order, so at any texel the weights
-   sum to at most one. The ground shader turns each weight into its
+   sum to at most one. The ground starts as grass (gardens); the
+   historical map's built blocks are yards of earth on top. The ground shader turns each weight into its
    surface, procedurally; where water wins it discards, and the river
    (city/water.ts) shows through, 1.6 m down between quay walls.
 
@@ -40,6 +41,8 @@ export function buildGround(city: City): Ground {
     g.setTransform(sx, 0, 0, sz, -x0 * sx, -z0 * sz);
     g.lineJoin = 'round'; g.lineCap = 'round';
     g.fillStyle = '#000'; g.fillRect(x0, z0, W, H);
+    // unbuilt, unpaved ground is garden: grass on A, nothing on B
+    if (g === a) { g.fillStyle = '#00f'; g.fillRect(x0, z0, W, H); }
   }
   type Paint = [string, string];   // colour on A, on B
   const SETTS: Paint = ['#f00', '#000'], SLABS: Paint = ['#0f0', '#000'], GRASS: Paint = ['#00f', '#000'];

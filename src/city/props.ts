@@ -116,10 +116,14 @@ export function buildTrees(city: City) {
 export function buildWalls(city: City) {
   const group = new THREE.Group();
   group.name = 'walls';
-  const solid = city.walls.filter((w) => w.kind !== 'railing'), rails = city.walls.filter((w) => w.kind === 'railing');
+  const solid = city.walls.filter((w) => w.kind === 'city' || w.kind === 'garden'), rails = city.walls.filter((w) => w.kind === 'railing');
   const mat = new THREE.MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.95, side: THREE.DoubleSide });
   const walls = new THREE.Mesh(wallGeometry(solid, true), mat);
   walls.castShadow = walls.receiveShadow = true;
+  const sand = new THREE.MeshStandardMaterial({ color: 0xcfc2a4, roughness: 0.9, side: THREE.DoubleSide });
+  const parapets = new THREE.Mesh(wallGeometry(city.walls.filter((w) => w.kind === 'parapet'), true), sand);
+  parapets.castShadow = parapets.receiveShadow = true;
+  group.add(parapets);
   // Railings: one thin sheet each, its bars cut out of it in the shader
   // (balusters every 12 cm, a top and a bottom rail, a post every 2 m).
   const rmat = new THREE.MeshStandardMaterial({ color: 0x1d1f20, roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide, alphaTest: 0.5 });
@@ -151,7 +155,7 @@ function wallGeometry(list: City['walls'], thick: boolean) {
     }
   };
   for (const w of list) {
-    const r = w.pts, h = w.h, t = thick ? w.t / 2 : 0;
+    const r = w.pts, h = w.h, t = thick ? w.t / 2 : 0, y0 = w.base ?? 0;
     let u = 0;
     for (let i = 2; i < r.length; i += 2) {
       const ax = r[i - 2]!, az = r[i - 1]!, bx = r[i]!, bz = r[i + 1]!;
@@ -162,9 +166,9 @@ function wallGeometry(list: City['walls'], thick: boolean) {
       const A = [ax - ex, az - ez], B = [bx + ex, bz + ez];
       const L1 = [A[0]! + nx * t, A[1]! + nz * t], L2 = [B[0]! + nx * t, B[1]! + nz * t];
       const R1 = [A[0]! - nx * t, A[1]! - nz * t], R2 = [B[0]! - nx * t, B[1]! - nz * t];
-      quad([L1[0]!, 0, L1[1]!], [L1[0]!, h, L1[1]!], [L2[0]!, h, L2[1]!], [L2[0]!, 0, L2[1]!], [nx, 0, nz], u, u + L);
+      quad([L1[0]!, y0, L1[1]!], [L1[0]!, h, L1[1]!], [L2[0]!, h, L2[1]!], [L2[0]!, y0, L2[1]!], [nx, 0, nz], u, u + L);
       if (thick) {
-        quad([R2[0]!, 0, R2[1]!], [R2[0]!, h, R2[1]!], [R1[0]!, h, R1[1]!], [R1[0]!, 0, R1[1]!], [-nx, 0, -nz], u + L, u);
+        quad([R2[0]!, y0, R2[1]!], [R2[0]!, h, R2[1]!], [R1[0]!, h, R1[1]!], [R1[0]!, y0, R1[1]!], [-nx, 0, -nz], u + L, u);
         quad([L1[0]!, h, L1[1]!], [R1[0]!, h, R1[1]!], [R2[0]!, h, R2[1]!], [L2[0]!, h, L2[1]!], [0, 1, 0], u, u + L);
       }
       u += L;
