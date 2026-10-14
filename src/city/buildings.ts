@@ -48,7 +48,8 @@ function facadeMaterial() {
         float u = vWall.x, y = vWall.y;
         float eave = vFac.x, storey = vFac.y, L = vFac.z;
         float flags = mod(floor(vFac.w), 128.0), seed = fract(vFac.w);
-        float src = floor(floor(vFac.w) / 128.0);
+        float src = mod(floor(floor(vFac.w) / 128.0), 4.0);
+        bool shop = floor(vFac.w) >= 512.0;
         bool blank = mod(flags, 2.0) >= 1.0;
         bool church = mod(floor(flags / 2.0), 2.0) >= 1.0;
         bool grand = mod(floor(flags / 4.0), 2.0) >= 1.0;
@@ -153,7 +154,26 @@ function facadeMaterial() {
         bool fits = !blank && !dormer && L > 2.0 && fy > 0.0 && 0.6 + si * storey + wy0 + wh < eave - 0.45;
         // the door: ground storey, the middle bay of a long enough wall
         bool door = !blank && si < 0.5 && nb >= 3.0 && abs(bi - floor(nb / 2.0)) < 0.5 && L > 7.0;
-        if (fits) {
+        // a shop: the ground storey's bays are display windows under a fascia
+        bool shopBay = shop && !blank && si < 0.5 && L > 4.0 && !door;
+        if (shopBay && fy > 0.0) {
+          vec2 p = vec2(x, fy);
+          float sw = min(bw - 0.5, 2.6);
+          float glassA = fBox(p, vec2(-sw * 0.5, 0.35), vec2(sw * 0.5, 2.55), aa);
+          float frameA = fBox(p, vec2(-sw * 0.5 - 0.1, 0.25), vec2(sw * 0.5 + 0.1, 2.65), aa);
+          // the fascia: a dark board with a lighter lettering band
+          float fascia = smoothstep(2.75 - aa, 2.75 + aa, fy) * (1.0 - smoothstep(3.2 - aa, 3.2 + aa, fy));
+          float letters = fascia * step(0.5, fHash(vec2(floor(u / 0.35), seed * 7.0))) * smoothstep(2.88, 2.9, fy) * (1.0 - smoothstep(3.07, 3.09, fy));
+          vec3 wood = mix(vec3(0.12, 0.16, 0.12), vec3(0.22, 0.12, 0.08), step(0.5, seed));
+          col = mix(col, wood, max(frameA, fascia));
+          col = mix(col, vec3(0.85, 0.75, 0.45), letters * 0.8);
+          float bars = 1.0 - smoothstep(0.02, 0.02 + aa, abs(p.x));
+          vec3 glass = vec3(0.04, 0.045, 0.05) + 0.06 * fHash(vec2(bi, seed));
+          col = mix(col, mix(glass, wood, bars * 0.0 + step(abs(p.y - 2.1), 0.03)), glassA);
+          rough = mix(rough, 0.08, glassA);
+          // by evening most shops have closed: a few still lit, dimmer than rooms
+          litWin = max(litWin, glassA * 0.35 * step(fHash(vec2(bi + 3.0, seed * 17.0)), 0.3));
+        } else if (fits) {
           float frame = 0.12;
           vec2 p = vec2(x, ly);
           vec2 a = door ? vec2(-0.75, -0.6) : vec2(-ww * 0.5, wy0);

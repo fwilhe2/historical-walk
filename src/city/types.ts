@@ -42,6 +42,7 @@ export interface Building {
   // 'stone' ashlar joints, 'copper' plain green sheet (lanterns).
   wall?: 'plaster' | 'brick' | 'stone' | 'copper';
   windows?: false;        // blank walls (sheds, the city wall's gates, colonnades)
+  shop?: true;            // shopfronts in the ground storey (the shopping streets of the year)
   ornate?: true;          // pilasters between the bays and a central risalit (baroque and classicist facades)
 }
 

@@ -647,6 +647,24 @@ for (const p of osm.points) {
   rails.push(...others, ...routes.map((pts) => ({ pts, kind: 'tram' as const })));
 }
 
+/* ── Shops ─────────────────────────────────────────────────────────
+   A house on one of the shopping streets — its outline within 3 m of
+   the street's carriageway edge — gets shopfronts below. Not the
+   landmarks, the churches or the lost palaces. */
+{
+  const shopping = streets.filter((st) => (st.kind === 'main' || st.kind === 'street') && hist.shopStreets.includes(st.name ?? ''));
+  let n = 0;
+  for (const b of buildings) {
+    if (b.kind && b.kind !== 'house') continue;
+    if (b.src === 'model' || b.wall === 'brick') continue;
+    const r = b.outer;
+    let hit = false;
+    for (let i = 0; i < r.length && !hit; i += 2) hit = shopping.some((st) => nearLine(st.pts, r[i]!, r[i + 1]!, st.w / 2 + 3));
+    if (hit) { b.shop = true; n++; }
+  }
+  console.log('shops:', n);
+}
+
 /* ── Gas lanterns ─────────────────────────────────────────────────
    Potsdam's streets were lit by gas in 1900. A lantern every 32 m
    along each street, alternating sides, at the kerb (a metre inside

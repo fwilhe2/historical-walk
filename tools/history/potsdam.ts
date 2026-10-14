@@ -26,6 +26,10 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  // The town's shopping streets about 1900: the Brandenburger Straße
+  // above all, the Nauener Straße, the Linden- and Charlottenstraße's
+  // ends, the Schwertfegerstraße and the streets round the Alter Markt.
+  shopStreets: ['Brandenburger Straße', 'Nauener Straße', 'Schwertfegerstraße', 'Brauerstraße', 'Friedrich-Ebert-Straße', 'Charlottenstraße', 'Lindenstraße', 'Alter Markt', 'Am Kanal', 'Breite Straße'],
   // The royal gardens round the town, all laid out before 1900.
   regionParks: ['Park Sanssouci', 'Park Babelsberg', 'Neuer Garten', 'Glienicker Park', 'Schlossgarten Glienicke', 'Schlosspark Sacrow',
     'Jagdschlosspark', 'Marlygarten', 'Sizilianischer Garten', 'Nordischer Garten', 'Paradiesgarten', 'Holländischer Garten'],

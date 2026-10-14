@@ -247,7 +247,7 @@ function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
   // flags: 1 blank, 2 church, 4 grand; 8 × wall style (0 plaster, 1 brick, 2 stone, 3 copper, 4 dormer); 64 ornate; 128 × source
   const style = b.wall === 'brick' ? 1 : b.wall === 'stone' ? 2 : b.wall === 'copper' ? 3 : 0;
   const flags = (b.windows === false ? 1 : 0) + (b.kind === 'church' ? 2 : b.kind === 'palace' || b.kind === 'public' ? 4 : 0) + 8 * style
-    + (b.ornate || b.kind === 'palace' ? 64 : 0) + 128 * SRC_CODE[b.src];
+    + (b.ornate || b.kind === 'palace' ? 64 : 0) + 128 * SRC_CODE[b.src] + (b.shop ? 512 : 0);
   const seed = (parseInt(b.id.replace(/\D/g, '').slice(-6) || '0', 10) % 997) / 997;
   for (let i = 0; i < n; i += 2) {
     const j = (i + 2) % n;

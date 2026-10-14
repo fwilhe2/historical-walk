@@ -26,7 +26,8 @@ export interface History {
   // like; dated survivors and landmarks stay.
   lost: { name: string; ring: number[] }[];
   about: Record<string, string>;
-  regionParks: string[];                             // parks of today that were parks in the year, by name                     // HUD text for named buildings that are not modelled landmarks
+  regionParks: string[];
+  shopStreets: string[];                             // streets (names of the year) whose houses had shops below                             // parks of today that were parks in the year, by name                     // HUD text for named buildings that are not modelled landmarks
 }
 
 export const HISTORY: Record<string, History> = { potsdam: POTSDAM };
