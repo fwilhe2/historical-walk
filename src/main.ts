@@ -123,7 +123,7 @@ if (probe) {
       await this.frames(3);
     },
     state() {
-      return JSON.stringify({ people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
+      return JSON.stringify({ people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -201,8 +201,9 @@ renderer.setAnimationLoop(() => {
   updateEnv();
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
-  traffic.step(dt);
-  people.step(dt, walker.x, walker.z, nightLight.value);
+  // under the probe, traffic and people hold still, so shots repeat
+  traffic.step(probe ? 0 : dt);
+  people.step(probe ? 0 : dt, walker.x, walker.z, nightLight.value);
   cloudTime.value += dt;
   clouds.position.x = walker.x; clouds.position.z = walker.z;
   hud.update(dt, walker, sunState.hour, ground);

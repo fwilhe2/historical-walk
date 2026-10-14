@@ -20,7 +20,7 @@ interface Person { kind: Kind; pts: number[]; cum: number[]; L: number; s: numbe
 
 const N = 1200;
 
-function joinByName(list: City['streets']): City['streets'] {
+export function joinByName(list: City['streets']): City['streets'] {
   const out: City['streets'] = [];
   const pool = list.map((s) => ({ ...s, pts: s.pts.slice() }));
   const near = (a: number[], i: number, b: number[], j: number) => Math.abs(a[i]! - b[j]!) < 0.5 && Math.abs(a[i + 1]! - b[j + 1]!) < 0.5;
