@@ -111,6 +111,8 @@ function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
     };
     if (holes.length) b.holes = holes;
     if (wall) b.wall = wall;
+    const arch = t['building:architecture'] ?? '';
+    if (/baroque|classicism|neoclassicism|renaissance/.test(arch) && lv >= 2 && wall !== 'brick') b.ornate = true;
     const base = minH ?? (minL !== undefined ? minL * storey : undefined);
     if (base) b.base = base;
     if (t.name) b.name = t.name;

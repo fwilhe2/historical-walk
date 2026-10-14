@@ -47,7 +47,8 @@ function facadeMaterial() {
         bool blank = mod(flags, 2.0) >= 1.0;
         bool church = mod(floor(flags / 2.0), 2.0) >= 1.0;
         bool grand = mod(floor(flags / 4.0), 2.0) >= 1.0;
-        float style = floor(flags / 8.0);
+        float style = mod(floor(flags / 8.0), 8.0);
+        bool ornate = flags >= 64.0;
         vec3 plaster = diffuseColor.rgb;
         // weathering: faint vertical streaks and a darker foot
         float streak = fHash(vec2(floor(u * 1.7), seed * 91.0));
@@ -126,6 +127,17 @@ function facadeMaterial() {
         float bw = L / nb;
         float bi = floor(u / bw);
         float x = (fract(u / bw) - 0.5) * bw;
+        // ornate facades: a giant-order pilaster at every bay line from the
+        // plinth to the cornice, and the middle three bays of a long wall
+        // stepped forward as a risalit, a shade lighter
+        if (ornate && !blank && nb >= 3.0 && y > 0.6 && y < eave - 0.45) {
+          float edge = (0.5 - abs(fract(u / bw) - 0.5)) * bw;          // m to the nearest bay line
+          float pil = 1.0 - smoothstep(0.3 - aa, 0.3 + aa, edge);
+          bool risalit = nb >= 5.0 && abs(bi - floor(nb / 2.0)) <= 1.0 && mod(nb, 2.0) > 0.5;
+          if (risalit) col *= 1.05;
+          col = mix(col, plaster * 1.2 + 0.03, pil * step(0.5, u) * step(u, L - 0.5));
+          col *= 1.0 - 0.3 * (smoothstep(0.3 - aa, 0.3, edge) - smoothstep(0.3, 0.4 + aa, edge)) * step(0.5, u) * step(u, L - 0.5);
+        }
         float fy = y - 0.6;
         float si = floor(fy / storey);
         float ly = fy - si * storey;

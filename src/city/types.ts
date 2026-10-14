@@ -42,6 +42,7 @@ export interface Building {
   // 'stone' ashlar joints, 'copper' plain green sheet (lanterns).
   wall?: 'plaster' | 'brick' | 'stone' | 'copper';
   windows?: false;        // blank walls (sheds, the city wall's gates, colonnades)
+  ornate?: true;          // pilasters between the bays and a central risalit (baroque and classicist facades)
 }
 
 export type AreaKind = 'water' | 'park' | 'grass' | 'square' | 'garden' | 'yard' | 'sand' | 'cemetery' | 'rail';
