@@ -200,4 +200,30 @@ export const LANDMARKS: Landmark[] = [
       P.ngon(u, f, 1.25, 12, 33, 33.1, { colour: '#c9a476', wall: 'stone', windows: false, roof: 'dome', roofH: 3, roofColour: '#b98d5c' });
     },
   },
+  {
+    /* The Langer Stall: the garrison's riding and drill hall of 1734
+       (Gayette), half-timbered, 167 m by 23 m under one roof. In 1781
+       Georg Christian Unger set a show front before its south gable on
+       the Breite Straße: five bays, a rusticated ground storey as a
+       base, a four-column Tuscan temple front with a pediment, and an
+       attic with Mars between Hercules and Minerva; in 1785 a massive
+       three-storey Montierungshaus closed the north end (potsdam.de,
+       veikkos-archiv). Heights estimated. */
+    id: 'langerstall', name: 'Langer Stall', year: 1781, at: [-414, -94], front: 180,
+    about: 'The garrison\'s drill hall of 1734, 167 m long under one roof; Georg Christian Unger\'s show front of 1781 faces the Breite Straße. Burnt 1945 — the front still stands.',
+    build(P, ring) {
+      const F = P.F, W = F.left + F.right;
+      P.footprint(ring, 0, 9, { colour: '#cdbb98', kind: 'public', roof: 'hipped', roofH: 8, roofColour: '#8e4a35', storey: 9 });
+      // the Montierungshaus at the north end
+      P.box(0, -F.back + 13, W, 26, 0, 12.5, { colour: '#d9c7a2', roof: 'hipped', roofH: 6, roofColour: '#8e4a35', storey: 3.9 });
+      // the show front: base, upper wall, columns, entablature and pediment, Mars
+      const f = F.front + 1.4, s = { colour: '#e2d7bf', wall: 'stone' as const, kind: 'palace' as const, storey: 6 };
+      P.box(0, f, W, 3, 0, 6, s);
+      P.box(0, f - 0.4, W, 2.2, 6, 16, { ...s, storey: 10 });
+      for (const u of [-4.5, -1.5, 1.5, 4.5]) P.column(u, f + 2.2, 0.55, 8.6, 6);
+      P.box(0, f + 1.3, 12, 3.2, 14.6, 16, { ...s, windows: false, roof: 'gabled', roofH: 3.2, ridgeAlong: 'front', roofColour: '#d6cbb3' });
+      P.box(0, f - 0.4, W, 2.2, 16, 17.2, { ...s, windows: false });
+      P.ngon(0, f, 0.6, 8, 17.2, 20.2, { colour: '#cfc3a8', wall: 'stone', windows: false, roof: 'spire', roofH: 0.6, roofColour: '#cfc3a8' });
+    },
+  },
 ];

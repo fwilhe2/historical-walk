@@ -34,7 +34,6 @@ export const POTSDAM: History = {
   regionParks: ['Park Sanssouci', 'Park Babelsberg', 'Neuer Garten', 'Glienicker Park', 'Schlossgarten Glienicke', 'Schlosspark Sacrow',
     'Jagdschlosspark', 'Marlygarten', 'Sizilianischer Garten', 'Nordischer Garten', 'Paradiesgarten', 'Holländischer Garten'],
   about: {
-    'Langer Stall': 'The guards\' exercise hall, 1734, rebuilt 1781 with Georg Christian Unger\'s portico toward the Breite Straße. Burnt 1945; only the portico stands today.',
     'Marstall': 'The royal stables: built 1685 as an orangery, a stable from 1714, remodelled by Knobelsdorff in 1746 with horse-tamer groups on the roof.',
     'Kommandantur': 'The garrison commander\'s house on the Lustgarten, 1819 on an older inn. Destroyed 1945.',
     'Palast Barberini': 'A town palace of 1771–72 by Carl von Gontard after the Palazzo Barberini in Rome. Destroyed 1945, rebuilt 2013–16.',
@@ -85,9 +84,6 @@ export const POTSDAM: History = {
     // The Gloriette on the Bassinplatz (1739–1945, OHM): a garden
     // pavilion, not a house — blank walls under a small dome. Form
     // estimated.
-    // The Langer Stall, the guards' exercise hall: one tall hall, not
-    // a stable shed. Heights estimated from photographs.
-    'ohm:r2854733': { eave: 9.5, roof: 'hipped', roofH: 8, kind: 'public', storey: 9 },
     // The Kutschpferdestall (1787–89, standing today): two storeys
     // round its court under a mansard roof. Estimated.
     'ohm:r2854909': { eave: 8.4, roof: 'mansard', roofH: 5, kind: 'house', storey: 3.9 },
