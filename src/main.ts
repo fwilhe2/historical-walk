@@ -142,7 +142,7 @@ function placeLampLights(glow: number) {
    Garnisonkirche, the quarters from St. Nikolai. Time runs at the
    clock's own pace, so a long walk hears them. */
 const towers = Object.fromEntries(city.labels.filter((l) => l.kind === 'landmark').map((l) => [l.text, l]));
-let lastSteps = 0, treeT = 0, nearTrees = 0, lastQuarter = Math.floor(sunState.hour * 4);
+let hoofT = 0, lastSteps = 0, treeT = 0, nearTrees = 0, lastQuarter = Math.floor(sunState.hour * 4);
 function stepSound(dt: number) {
   if (walker.steps !== lastSteps) {
     lastSteps = walker.steps;
@@ -153,6 +153,10 @@ function stepSound(dt: number) {
     nearTrees = 0;
     for (const t of city.trees) if ((t.x - walker.x) ** 2 + (t.z - walker.z) ** 2 < 35 * 35) nearTrees++;
   }
+  // hoofbeats of the nearest moving tram horse, four to a stride
+  let hd = Infinity;
+  for (const c of traffic.cars) if (c.wait <= 0) hd = Math.min(hd, Math.hypot(c.obj.position.x - walker.x, c.obj.position.z - walker.z));
+  if (hd < 80 && (hoofT -= dt) <= 0) { hoofT = 0.18 + Math.random() * 0.06; sound.hoof(hd); }
   const surf = ground.surface(walker.x, walker.z);
   sound.update(dt, nearTrees, surf === 'setts' || surf === 'slabs');
   const q = Math.floor(sunState.hour * 4);

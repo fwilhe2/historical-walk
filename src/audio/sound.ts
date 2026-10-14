@@ -90,6 +90,23 @@ export const sound = {
       if (trees > 0 || Math.random() < 0.15) bird(Math.min(1, 0.25 + trees * 0.05));
     }
   },
+  /* One hoof on setts at distance d (m): a short knock with a ring. */
+  hoof(d: number) {
+    if (!ctx || muted) return;
+    const vol = 0.5 / (1 + d / 12);
+    if (vol < 0.01) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 1100 + Math.random() * 500; f.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
+    src.connect(f).connect(g).connect(master);
+    src.start(t, Math.random() * 0.8, 0.12);
+  },
   /* A bell at distance d (m) striking n times. */
   bell(n: number, d: number, pitch: number) {
     if (!ctx || muted) return;
