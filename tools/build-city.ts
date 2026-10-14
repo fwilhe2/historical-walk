@@ -159,7 +159,7 @@ const ohmAlive = ohmBuildings.filter((f) => aliveIn(f.tags, YEAR));
 const ohmLater = ohmBuildings.filter((f) => (year(f.tags.start_date) ?? -Infinity) > YEAR);
 const covers = (fs: Feature[], x: number, z: number) => fs.some((f) => f.outer.some((r) => inside(flat(r), x, z)));
 
-const stats = { osmDated: 0, osmUndated: 0, osmDroppedLater: 0, osmDroppedOhm: 0, osmDroppedMask: 0, osmDroppedLost: 0, ohm: 0, mtb: 0 };
+const stats = { osmDated: 0, osmUndated: 0, osmDroppedLater: 0, osmDroppedOhm: 0, osmDroppedMask: 0, osmDroppedLost: 0, ohm: 0, mtb: 0, mtbAlone: 0 };
 for (const f of osm.feats) {
   const t = f.tags;
   if (!f.closed || !t.building || t['building:part'] || SKIP_BUILDING.has(t.building)) continue;
@@ -261,7 +261,7 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 // Modern areas (water and green) first, then what OHM says of 1900 on top.
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
-for (const sq of hist.squares) areas.push({ kind: 'square', outer: orient(sq.ring, true), name: sq.name });
+for (const sq of hist.squares) areas.push({ kind: sq.kind ?? 'square', outer: orient(sq.ring, true), name: sq.name });
 // The 1903 map's built blocks: what is not building in them is yard,
 // packed earth and paving; everything else unbuilt is garden (the
 // ground's default). Yards go first, so parks and squares paint over.
@@ -481,6 +481,22 @@ if (mask) {
       }
     }
   }
+  /* A rebuilt house stands in a row: one with no other building within
+     1.5 m of either end of its frontage is the map's tree symbols or
+     dots read as a block, not a street front, and goes. */
+  const near = (x: number, z: number, self: Building) => buildings.some((b) => b !== self && (inside(b.outer, x, z) || ringDist(b.outer, x, z) < 1.5));
+  for (let i = buildings.length - 1; i >= 0; i--) {
+    const b = buildings[i]!;
+    if (b.src !== 'mtb') continue;
+    const o = b.outer;   // f0, f1, back1, back0
+    const ends: [number, number][] = [[o[0]!, o[1]!], [o[2]!, o[3]!], [o[4]!, o[5]!], [o[6]!, o[7]!]];
+    if (!ends.some(([x, z]) => near(x, z, b))) { buildings.splice(i, 1); stats.mtb--; stats.mtbAlone++; }
+  }
+}
+function ringDist(r: number[], x: number, z: number) {
+  let m = Infinity;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) m = Math.min(m, segDist2(x, z, r[j]!, r[j + 1]!, r[i]!, r[i + 1]!));
+  return Math.sqrt(m);
 }
 
 /* ── Walls, rails, trees ─────────────────────────────────────── */

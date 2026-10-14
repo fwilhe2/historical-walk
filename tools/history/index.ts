@@ -18,7 +18,7 @@ export interface History {
   landmarks: Landmark[];
   // Open squares of the year that neither OSM nor OHM outline, as
   // local-metre rings; nothing is rebuilt on them.
-  squares: { name: string; ring: number[] }[];
+  squares: { name: string; ring: number[]; kind?: 'square' | 'park' }[];
   canalWidth: Record<string, number>;               // m between quay walls, by OHM name
   rename: Record<string, string>;                    // today's street name → the year's, where OHM has none
   // Quarters destroyed and rebuilt to a new plan after the year: an

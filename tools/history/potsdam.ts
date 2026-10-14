@@ -65,6 +65,12 @@ export const POTSDAM: History = {
     // Fortunaportal, the Rathaus and the corner of the colonnade; the
     // obelisk (1755) in its middle.
     { name: 'Alter Markt', ring: [-45, -88, 100, -98, 104, -25, 60, -20, -45, -20] },
+    // South of the Breite Straße west of the Lustgarten the 1903 map
+    // marks a barracks ("Kas.") round an open yard — a sandy drill
+    // ground, whose scattered tree symbols read as blocks. Outline from
+    // the map. (The barracks buildings, drawn solid black on its south
+    // side, are not yet modelled.)
+    { name: 'Kasernenhof', ring: [-575, 62, -400, 62, -400, 195, -575, 195] },
   ],
   drop: new Set([]),
   patch: {
