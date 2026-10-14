@@ -74,10 +74,10 @@ if (start?.y !== undefined) { walker.fly = true; walker.flyY = walker.y = start.
 /* ── Controls that act once ─────────────────────────────────────── */
 const overlay = document.getElementById('overlay')!;
 const lock = () => renderer.domElement.requestPointerLock();
-overlay.addEventListener('click', () => { overlay.classList.add('hidden'); sound.unlock(); lock(); });
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); sound.unlock(); if (!matchMedia('(pointer: coarse)').matches) lock(); });
 renderer.domElement.addEventListener('click', lock);
 document.addEventListener('pointerlockchange', () => {
-  if (!document.pointerLockElement && !probe) overlay.classList.remove('hidden');
+  if (!document.pointerLockElement && !probe && !matchMedia('(pointer: coarse)').matches) overlay.classList.remove('hidden');
 });
 document.getElementById('credits')!.textContent = city.credits.join(' · ');
 addEventListener('keydown', (e) => {

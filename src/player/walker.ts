@@ -1,4 +1,4 @@
-import { keys, look } from './input';
+import { keys, look, stick } from './input';
 import { pushOut, type Segs } from './collide';
 import type { Ground } from '../city/ground';
 import { heightAt } from '../city/terrain';
@@ -28,9 +28,9 @@ export function stepWalker(dt: number, segs: Segs, ground: Ground, sens: number)
   w.yaw -= look.dx * sens; w.pitch -= look.dy * sens;
   look.dx = look.dy = 0;
   w.pitch = Math.max(-1.45, Math.min(1.45, w.pitch));
-  const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
-  const kz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
-  const len = Math.hypot(kx, kz) || 1;
+  const kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + stick.x;
+  const kz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0) + stick.z;
+  const len = Math.max(1, Math.hypot(kx, kz));
   // yaw 0 looks north (−z); positive yaw turns left (toward −x)
   const s = Math.sin(w.yaw), c = Math.cos(w.yaw);
   const ix = (kx * c + kz * s) / len, iz = (-kx * s + kz * c) / len;
