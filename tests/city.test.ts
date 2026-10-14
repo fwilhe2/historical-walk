@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { centroid, inside } from '../src/geom/poly';
+import { heightAt, setTerrain } from '../src/city/terrain';
 import type { City } from '../src/city/types';
 
 /* The generated city (bun run city), checked for what a change to the
@@ -48,5 +49,18 @@ describe('Potsdam 1900', () => {
       const [x, z] = centroid(b.outer);
       expect(x > x0 - 200 && x < x1 + 200 && z > z0 - 200 && z < z1 + 200, b.id).toBe(true);
     }
+  });
+  it('is level in the town and on the water, with the Brauhausberg standing south of the Havel', () => {
+    setTerrain(city.terrain);
+    expect(heightAt(city.spawn.x, city.spawn.z)).toBe(0);
+    expect(heightAt(30, -60)).toBe(0);                 // Alter Markt
+    for (const a of city.areas.filter((a) => a.kind === 'water').slice(0, 20)) {
+      const [x, z] = centroid(a.outer);
+      if (inside(a.outer, x, z)) expect(heightAt(x, z)).toBe(0);
+    }
+    // Brauhausberg, 52.3895 N 13.0640 E: some 20 m and more above the town
+    let top = 0;
+    for (let x = 100; x < 450; x += 10) for (let z = 500; z < 900; z += 10) top = Math.max(top, heightAt(x, z));
+    expect(top).toBeGreaterThan(20);
   });
 });
