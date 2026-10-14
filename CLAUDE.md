@@ -28,7 +28,9 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 - `src/city/types.ts` — the `City` the app loads; `src/cities/<id>/city.json` is generated, never hand-edited.
 - `src/geom/poly.ts` — imports nothing; shared by tools and app.
 - `src/city/` — `massing.ts` (pure: walls and roofs of one building), `buildings.ts` (merged meshes per 200 m tile, facade and roof shaders), `ground.ts` (the plan rasterised into weight textures; also answers `isWater`/`surface` for the walker), `water.ts`, `props.ts` (trees, walls and railings, columns).
-- `src/player/` — input, collision (segments on a grid), walker. `src/render/` — renderer, sky and sun. `src/ui/` — HUD, the 1903 map. `src/app/view.ts` — the URL hash.
+- `src/city/terrain.ts` — `heightAt()`, the one height source: the ground mesh, buildings (at their lowest corner), props, the tram, people and the walker all ask it. Zero in the town and on the water.
+- `src/city/traffic.ts` (the horse tram on the joined OHM routes), `src/city/people.ts` (pedestrians, instanced parts posed per frame), `src/audio/sound.ts` (all synthesised).
+- `src/player/` — input (keys, mouse, touch), collision (segments on a grid), walker. `src/render/` — renderer, sky, sun, clouds, stars. `src/ui/` — HUD, the 1903 map. `src/app/view.ts` — the URL hash.
 
 ## Things that are easy to break
 
@@ -39,6 +41,10 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 - **Hashes in tools** are unsigned (`>>> 0`); shift them with `>>>`, never `>>` (a negative index once left half the rebuilt houses without a colour).
 - Ground texture channels: A = setts, slabs, grass; B = water, rail, gravel; C (half resolution) = blurred footprints for contact shade. Painted opaque in order, so weights sum to at most one. Water discards the ground; the walker reads the same raster.
 - three r160: `onBeforeCompile` uniforms need their GLSL declared; `customProgramCacheKey` per patched material.
+
+## Toward a shared engine
+
+The user may split the engine from the cities (and from ../lunar-walk) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. (Known leaks to clean when splitting: `main.ts` imports the Potsdam city.json and names the bell towers; `ui/map.ts` imports Potsdam's map raster and credits; `people.ts` weights streets by distance from a hard-coded centre.)
 
 ## Writing history
 
