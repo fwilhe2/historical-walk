@@ -590,6 +590,34 @@ for (const p of osm.points) {
   trees.push({ x: round(p.p[0]), z: round(p.p[1]), h: 9 + (seed % 9), r: 2.8 + (seed % 5) * 0.5 });
 }
 
+/* Tram lines come in segments; join those that meet end to end
+   (within 3 m) into routes, so a car can run a whole line. */
+{
+  const trams = rails.filter((r) => r.kind === 'tram').map((r) => r.pts.slice());
+  const others = rails.filter((r) => r.kind !== 'tram');
+  const near = (ax: number, az: number, bx: number, bz: number) => Math.hypot(ax - bx, az - bz) < 3;
+  const routes: number[][] = [];
+  while (trams.length) {
+    let cur = trams.pop()!;
+    for (let grown = true; grown;) {
+      grown = false;
+      for (let i = 0; i < trams.length; i++) {
+        const t = trams[i]!, n = cur.length, m = t.length;
+        const rev = (r: number[]) => { const o: number[] = []; for (let k = r.length - 2; k >= 0; k -= 2) o.push(r[k]!, r[k + 1]!); return o; };
+        if (near(cur[n - 2]!, cur[n - 1]!, t[0]!, t[1]!)) cur = cur.concat(t.slice(2));
+        else if (near(cur[n - 2]!, cur[n - 1]!, t[m - 2]!, t[m - 1]!)) cur = cur.concat(rev(t).slice(2));
+        else if (near(cur[0]!, cur[1]!, t[m - 2]!, t[m - 1]!)) cur = t.slice(0, -2).concat(cur);
+        else if (near(cur[0]!, cur[1]!, t[0]!, t[1]!)) cur = rev(t).slice(0, -2).concat(cur);
+        else continue;
+        trams.splice(i, 1); grown = true; break;
+      }
+    }
+    routes.push(cur);
+  }
+  rails.length = 0;
+  rails.push(...others, ...routes.map((pts) => ({ pts, kind: 'tram' as const })));
+}
+
 /* ── Gas lanterns ─────────────────────────────────────────────────
    Potsdam's streets were lit by gas in 1900. A lantern every 32 m
    along each street, alternating sides, at the kerb (a metre inside

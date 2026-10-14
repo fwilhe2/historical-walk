@@ -4,6 +4,7 @@ import { buildBuildings, nightLight, sourceView } from './city/buildings';
 import { buildGround } from './city/ground';
 import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
+import { buildTraffic } from './city/traffic';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
@@ -31,6 +32,8 @@ scene.add(buildWalls(city));
 scene.add(buildColumns(city));
 scene.add(buildLamps(city));
 scene.add(buildRails(city));
+const traffic = buildTraffic(city);
+scene.add(traffic.group);
 const segs = buildSegs(city);
 // The sky through the environment map is the ambient light: about
 // a fifth of the sun's on a clear afternoon, which 0.7 gives here.
@@ -110,7 +113,7 @@ if (probe) {
       await this.frames(3);
     },
     state() {
-      return JSON.stringify({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
+      return JSON.stringify({ cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -183,6 +186,7 @@ renderer.setAnimationLoop(() => {
   updateEnv();
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
+  traffic.step(dt);
   cloudTime.value += dt;
   clouds.position.x = walker.x; clouds.position.z = walker.z;
   hud.update(dt, walker, sunState.hour, ground);
