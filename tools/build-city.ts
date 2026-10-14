@@ -120,6 +120,12 @@ function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
     if (addr) b.addr = addr;
     const y = year(t.start_date) ?? year(t.year_of_construction);
     if (y) b.year = y;
+    // A flat roof on a house built before 1880 is today's roof or a
+    // mapping shortcut: the town's baroque and classicist houses had
+    // pitched roofs. Such a house gets a hipped roof of its depth.
+    if (shape === 'flat' && y !== undefined && y < 1880 && depth > 4) {
+      b.roof = 'hipped'; b.roofH = round(Math.min(depth * 0.45, 8));
+    }
     if (kind) b.kind = kind;
     if (kind === 'shed' || kind === 'colonnade') b.windows = false;
     out.push(b);
