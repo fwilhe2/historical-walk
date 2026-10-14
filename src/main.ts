@@ -10,12 +10,14 @@ import { setTerrain } from './city/terrain';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
+import { look } from './player/input';
 import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
 import { SUN_DIR, cloudTime, clouds, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
 import { hud, note } from './ui/hud';
 import { historicMap } from './ui/map';
 import { sound } from './audio/sound';
 import { parseView, viewHash } from './app/view';
+import { makeTour } from './app/tour';
 
 /* ── Boot ───────────────────────────────────────────────────────
    Load the city, build its meshes, place the walker, run. */
@@ -45,6 +47,7 @@ scene.add(traffic.group);
 const people = buildPeople(city);
 scene.add(people.group);
 const segs = buildSegs(city);
+const tour = makeTour(city);
 // The sky through the environment map is the ambient light: about
 // a fifth of the sun's on a clear afternoon, which 0.7 gives here.
 scene.traverse((o) => {
@@ -89,6 +92,8 @@ document.addEventListener('pointerlockchange', () => {
 document.getElementById('credits')!.textContent = city.credits.join(' · ');
 addEventListener('keydown', (e) => {
   if (e.repeat && e.code !== 'BracketLeft' && e.code !== 'BracketRight') return;
+  if (e.code === 'KeyT') { if (tour.on) { tour.stop(walker); note('TOUR ENDED'); } else note(tour.start(walker) ? 'TOUR · any key to stop' : 'NO TOUR HERE'); return; }
+  if (tour.on && !['KeyH', 'KeyM', 'KeyN', 'KeyV', 'BracketLeft', 'BracketRight'].includes(e.code)) { tour.stop(walker); note('TOUR ENDED'); }
   if (e.code === 'KeyF') { walker.fly = !walker.fly; if (walker.fly) walker.flyY = Math.max(walker.flyY, 40); note(walker.fly ? 'FLYING' : 'WALKING'); }
   if (e.code === 'KeyH') hud.toggleClean();
   if (e.code === 'KeyM') historicMap.toggle();
@@ -188,6 +193,8 @@ const clock = new THREE.Clock();
 let hashT = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
+  tour.step(dt, walker);
+  if (tour.on) { look.dx = look.dy = 0; }
   stepWalker(dt, segs, ground, 0.0022);
   if (!probe) sunState.hour = (sunState.hour + dt / 3600) % 24;
   stepSound(dt);

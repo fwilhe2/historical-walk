@@ -21,6 +21,8 @@ export const walker = {
   phase: 0,      // step cycle, radians; a step every π
   steps: 0,      // steps taken, for footstep sounds
   bob: 0, sway: 0,
+  // set by the tour (app/tour.ts): a velocity to walk at instead of the keys'
+  auto: null as { vx: number; vz: number } | null,
 };
 
 export function stepWalker(dt: number, segs: Segs, ground: Ground, sens: number) {
@@ -44,7 +46,8 @@ export function stepWalker(dt: number, segs: Segs, ground: Ground, sens: number)
     return;
   }
   const vmax = keys.ShiftLeft || keys.ShiftRight ? BRISK : WALK;
-  const tx = ix * vmax * (kx || kz ? 1 : 0), tz = iz * vmax * (kx || kz ? 1 : 0);
+  let tx = ix * vmax * (kx || kz ? 1 : 0), tz = iz * vmax * (kx || kz ? 1 : 0);
+  if (w.auto) { tx = w.auto.vx; tz = w.auto.vz; }
   const a = Math.min(1, dt * ((kx || kz) ? 5 : 7));
   w.vx += (tx - w.vx) * a; w.vz += (tz - w.vz) * a;
   let nx = w.x + w.vx * dt, nz = w.z + w.vz * dt;
