@@ -42,14 +42,14 @@ const num = (s: string | undefined) => {
 /* ── Colours ──────────────────────────────────────────────────── */
 const NAMED: Record<string, string> = {
   white: '#ece8de', beige: '#d9c9a3', yellow: '#dcc27a', lightyellow: '#e6d9a6', ivory: '#ece4cc', cream: '#e8dcb8',
-  orange: '#d49a5a', red: '#a8503c', brown: '#7e5a44', pink: '#d8a9a0', rose: '#d6a29a', salmon: '#d89a84',
+  orange: '#d49a5a', red: '#9c5038', brown: '#7e5a44', pink: '#d8a9a0', rose: '#d6a29a', salmon: '#d89a84',
   grey: '#a9a49b', gray: '#a9a49b', lightgrey: '#c9c4ba', lightgray: '#c9c4ba', darkgrey: '#6f6b66', darkgray: '#6f6b66',
   green: '#8a9c7a', lightgreen: '#b5c4a0', blue: '#8fa2b4', lightblue: '#b3c3cf', black: '#38363a', sand: '#d4c09a',
   ochre: '#c9a25e', tan: '#c8ab84', silver: '#b8b8b4', olive: '#8c8a5c', maroon: '#7a3f34', terracotta: '#b0634a',
 };
 function colour(s: string | undefined): string | undefined {
   if (!s) return undefined;
-  const v = s.trim().toLowerCase().replace(/[\s_-]/g, '');
+  const v = s.split(';')[0]!.trim().toLowerCase().replace(/[\s_-]/g, '');
   if (/^#[0-9a-f]{6}$/.test(v)) return v;
   if (/^#[0-9a-f]{3}$/.test(v)) return '#' + [...v.slice(1)].map((c) => c + c).join('');
   return NAMED[v];
@@ -100,13 +100,17 @@ function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
     if (shape === 'flat') roofH = 0;
     if (h !== undefined) eave = Math.max(2.5, h - roofH);
     const seed = hashStr(f.id);
+    const mat = (t['building:material'] ?? '').split(';')[0]!.trim();
+    const wall: Building['wall'] = mat === 'brick' || mat === 'bricks' ? 'brick' : mat === 'sandstone' || mat === 'stone' ? 'stone' : undefined;
     const b: Building = {
       id: f.id, src, outer,
       eave: round(eave), roofH: round(roofH), roof: shape, storey,
-      colour: colour(t['building:colour']) ?? PLASTER[seed % PLASTER.length]!,
+      // brick of the Dutch Quarter: a red that has weathered to brown-orange
+      colour: colour(t['building:colour']) ?? (wall === 'brick' ? '#9c5038' : PLASTER[seed % PLASTER.length]!),
       roofColour: colour(t['roof:colour']) ?? ROOF_MAT[t['roof:material'] ?? ''] ?? (kind === 'church' || kind === 'palace' ? '#5a5e66' : '#9b4f37'),
     };
     if (holes.length) b.holes = holes;
+    if (wall) b.wall = wall;
     const base = minH ?? (minL !== undefined ? minL * storey : undefined);
     if (base) b.base = base;
     if (t.name) b.name = t.name;
@@ -234,6 +238,16 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
 for (const sq of hist.squares) areas.push({ kind: 'square', outer: orient(sq.ring, true), name: sq.name });
+// An undated building standing in a park or square of the year came later.
+{
+  const open = areas.filter((a) => a.kind !== 'water' && a.kind !== 'rail');
+  for (let i = buildings.length - 1; i >= 0; i--) {
+    const b = buildings[i]!;
+    if (b.src !== 'osm' || b.year !== undefined) continue;
+    const [x, z] = centroid(b.outer);
+    if (open.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((h) => inside(h, x, z)))) { buildings.splice(i, 1); stats.osmDroppedMask++; }
+  }
+}
 // Canals that OHM has only as a line: widened to water, lined with
 // railings later (once the bridges are known).
 const canals: { left: number[]; right: number[] }[] = [];
