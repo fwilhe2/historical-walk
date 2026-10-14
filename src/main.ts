@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { buildBuildings } from './city/buildings';
 import { buildGround } from './city/ground';
-import { buildTrees, buildWalls } from './city/props';
+import { buildColumns, buildTrees, buildWalls } from './city/props';
 import { buildWater, waterTime } from './city/water';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
@@ -26,6 +26,7 @@ scene.add(buildWater(city, ground));
 scene.add(buildBuildings(city.buildings));
 scene.add(buildTrees(city));
 scene.add(buildWalls(city));
+scene.add(buildColumns(city));
 const segs = buildSegs(city);
 // The sky through the environment map is the ambient light: about
 // a fifth of the sun's on a clear afternoon, which 0.7 gives here.

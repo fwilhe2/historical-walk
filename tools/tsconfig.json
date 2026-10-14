@@ -2,6 +2,6 @@
   // The build tools run directly under Node (type stripping), so they
   // import with .ts extensions and see Node's types, not the DOM's.
   "extends": "../tsconfig.json",
-  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"], "allowImportingTsExtensions": true },
+  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"], "allowImportingTsExtensions": true, "erasableSyntaxOnly": true },
   "include": [".", "../src/types/probe.d.ts"]
 }

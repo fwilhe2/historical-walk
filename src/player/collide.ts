@@ -26,6 +26,12 @@ export function buildSegs(city: City): Segs {
     for (const h of b.holes ?? []) ring(h, true);
   }
   for (const w of city.walls) ring(w.pts, false);
+  // columns as small squares
+  for (const c of city.columns) {
+    if (c.base > 1) continue;
+    const r = c.r * 1.2;
+    ring([c.x - r, c.z - r, c.x + r, c.z - r, c.x + r, c.z + r, c.x - r, c.z + r], true);
+  }
   const seg = new Float32Array(s);
   const cells = new Map<number, number[]>();
   for (let k = 0; k < seg.length; k += 4) {

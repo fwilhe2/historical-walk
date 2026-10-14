@@ -14,9 +14,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
 import { area, bbox, centroid, inside, inset, obb, orient, simplify, straighten, type Ring } from '../src/geom/poly.ts';
-import type { Area, AreaKind, Building, City, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
+import type { Area, AreaKind, Building, City, Column, Label, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
 import { HISTORY } from './history/index.ts';
 import { blockOutlines, loadMask, maskShare, type Mask } from './mask.ts';
+import { Parts, frame } from './landmarks.ts';
 
 const id = process.argv[2] ?? 'potsdam';
 const spec = CITIES[id];
@@ -183,6 +184,24 @@ for (const f of ohmAlive) {
 }
 for (const b of buildings) Object.assign(b, hist.patch[b.id] ?? {});
 
+/* ── Landmarks ────────────────────────────────────────────────────
+   Each replaces the mapped footprint under its `at` point (and every
+   other footprint whose centre falls inside that one) with its parts. */
+const columns: Column[] = [];
+for (const lm of hist.landmarks) {
+  const hits = buildings.filter((b) => inside(b.outer, lm.at[0], lm.at[1]));
+  if (!hits.length) { console.warn('landmark without footprint:', lm.id); continue; }
+  hits.sort((a, b) => Math.abs(area(b.outer)) - Math.abs(area(a.outer)));
+  const ring = hits[0]!.outer;
+  const gone = new Set(hits);
+  for (const b of buildings) { const [x, z] = centroid(b.outer); if (inside(ring, x, z)) gone.add(b); }
+  for (let i = buildings.length - 1; i >= 0; i--) if (gone.has(buildings[i]!)) buildings.splice(i, 1);
+  const P = new Parts(lm.id, frame(ring, lm.front), lm.name, lm.year);
+  lm.build(P, ring);
+  buildings.push(...P.list);
+  columns.push(...P.columns);
+}
+
 /* ── Areas ────────────────────────────────────────────────────── */
 function areaKind(t: Tags): AreaKind | undefined {
   if (t.natural === 'water' || t.waterway === 'riverbank' || t.landuse === 'basin' || t.landuse === 'reservoir') return 'water';
@@ -214,6 +233,7 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 // Modern areas (water and green) first, then what OHM says of 1900 on top.
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
+for (const sq of hist.squares) areas.push({ kind: 'square', outer: orient(sq.ring, true), name: sq.name });
 
 /* ── Lost frontage, rebuilt from the historical map's blocks ──────
    Inside the closely built town every block of the map was lined
@@ -269,7 +289,7 @@ if (mask) {
       for (let i = 0; i < k; i++) {
         const t0 = s0 + (len * i) / k, t1 = s0 + (len * (i + 1)) / k;
         const ps = hashStr(`${e}:${i}:${seed}`);
-        const depth = maxDepth * (0.85 + 0.15 * ((ps >> 3) % 7) / 6);
+        const depth = maxDepth * (0.85 + 0.15 * ((ps >>> 3) % 7) / 6);
         const f0x = ax + ux * t0, f0z = az + uz * t0, f1x = ax + ux * t1, f1z = az + uz * t1;
         // samples a step inside the frontage: any one built, water or open means no house
         let skip = !inside(hist.town, (f0x + f1x) / 2 + ix * depth / 2, (f0z + f1z) / 2 + iz * depth / 2);
@@ -287,7 +307,7 @@ if (mask) {
           id: `mtb${n++}`, src: 'mtb', outer,
           eave: round(levels * storey + 0.6), roofH: round(depth * (roof === 'mansard' ? 0.42 : 0.48)), roof,
           ridge: Math.atan2(uz, ux), storey,
-          colour: PLASTER[(ps >> 5) % PLASTER.length]!, roofColour: (ps >> 9) % 6 === 0 ? '#555a60' : '#9b4f37',
+          colour: PLASTER[(ps >>> 5) % PLASTER.length]!, roofColour: (ps >>> 9) % 6 === 0 ? '#555a60' : '#9b4f37',
         });
         stats.mtb++;
       }
@@ -351,18 +371,24 @@ for (const b of buildings) {
   labels.push({ x: round(x), z: round(z), text: b.name, kind: 'landmark' });
 }
 
+/* ── Check ─────────────────────────────────────────────────────── */
+for (const b of buildings) {
+  const bad = !/^#[0-9a-f]{6}$/.test(b.colour) || !/^#[0-9a-f]{6}$/.test(b.roofColour) || !(b.eave > 0) || b.outer.length < 6 || b.outer.some((v) => !Number.isFinite(v));
+  if (bad) throw new Error('bad building ' + JSON.stringify(b));
+}
+
 /* ── Clip to bounds and write ─────────────────────────────────── */
 const keepRing = (r: Ring) => { for (let i = 0; i < r.length; i += 2) if (inBounds([r[i]!, r[i + 1]!])) return true; return false; };
 const city: City = {
   id, name: hist.name, year: YEAR, origin: spec.origin,
   bounds: [round(bx0), round(bz0), round(bx1), round(bz1)],
-  spawn: (() => { const [x, z] = fwd(hist.spawn.lat, hist.spawn.lon); return { x: round(x), z: round(z), yaw: hist.spawn.yaw }; })(),
+  spawn: hist.spawn,
   buildings,
   areas: areas.filter((a) => keepRing(a.outer) || a.kind === 'water'),
   streets: streets.filter((s) => keepRing(s.pts)),
   walls: walls.filter((w) => keepRing(w.pts)),
   rails: rails.filter((r) => keepRing(r.pts)),
-  trees, labels,
+  trees, columns, labels,
   water: hist.water,
   credits: hist.credits,
 };

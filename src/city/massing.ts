@@ -38,10 +38,23 @@ export function hexRGB(hex: string): [number, number, number] {
 }
 
 /* The roof planes, in world x/z, for a building's shape. */
-export function roofPlanes(b: Building): { planes: Plane[]; mode: 'planes' | 'distance'; H: number; k: number } {
+/* Distance roofs rise with the distance d from the outline:
+   'hip'   min(H, k·d)                 a hipped roof on any outline
+   'dome'  H·√(1 − (1 − d/R)²)        a dome over a round (polygonal) drum
+   'spire' H·d/R                       a pyramid of as many faces as the outline has sides
+   R is the outline's inradius, about the rectangle's half-width. */
+export type Profile = 'hip' | 'dome' | 'spire';
+export interface RoofPlan { planes: Plane[]; mode: 'planes' | 'distance'; H: number; k: number; profile: Profile; R: number }
+
+export function roofPlanes(b: Building): RoofPlan {
   const H = b.roofH;
-  if (b.roof === 'flat' || H <= 0.05) return { planes: [[0, 0, 0]], mode: 'planes', H: 0, k: 0 };
+  const none = { profile: 'hip' as Profile, R: 1 };
+  if (b.roof === 'flat' || H <= 0.05) return { planes: [[0, 0, 0]], mode: 'planes', H: 0, k: 0, ...none };
   let box = b.ridge !== undefined ? fit(b.outer, b.ridge) : obb(b.outer);
+  if (b.roof === 'dome' || b.roof === 'spire') {
+    const R = Math.max(0.1, Math.min(box.a, box.b));
+    return { planes: [], mode: 'distance', H, k: H / R, profile: b.roof, R };
+  }
   if (b.ridge === undefined && box.a < box.b) box = fit(b.outer, box.ang + Math.PI / 2);
   const A = box.a, B = box.b;
   const fill = Math.abs(area(b.outer)) / (4 * A * B);
@@ -50,7 +63,7 @@ export function roofPlanes(b: Building): { planes: Plane[]; mode: 'planes' | 'di
     // Distance roof; same pitch as the rectangle's would have had,
     // but no taller than a wing of ordinary depth makes it.
     const k = Math.min(H / Math.max(B, 1), 1.2);
-    return { planes: [], mode: 'distance', H: Math.min(H, k * 7.5), k };
+    return { planes: [], mode: 'distance', H: Math.min(H, k * 7.5), k, ...none };
   }
   const c = Math.cos(box.ang), s = Math.sin(box.ang);
   const P = (a0: number, au: number, av: number): Plane => {
@@ -72,7 +85,6 @@ export function roofPlanes(b: Building): { planes: Plane[]; mode: 'planes' | 'di
       break;
     }
     case 'pyramidal':
-    case 'dome':
       planes.push(P(H, 0, -H / B), P(H, 0, H / B), P(H, -H / A, 0), P(H, H / A, 0));
       break;
     case 'mansard': {
@@ -84,7 +96,13 @@ export function roofPlanes(b: Building): { planes: Plane[]; mode: 'planes' | 'di
       break;
     }
   }
-  return { planes, mode: 'planes', H, k };
+  return { planes, mode: 'planes', H, k, ...none };
+}
+
+function distanceLift(rp: RoofPlan, d: number) {
+  if (rp.profile === 'hip') return Math.min(rp.H, rp.k * d);
+  const t = Math.min(1, d / rp.R);
+  return rp.profile === 'dome' ? rp.H * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))) : rp.H * t;
 }
 
 const evalP = (p: Plane, x: number, z: number) => p[0] + p[1] * x + p[2] * z;
@@ -140,7 +158,7 @@ function pushTri(buf: RoofBuf, p: number[], nx: number, ny: number, nz: number, 
 }
 
 /* Roof faces over the footprint. */
-function roofFaces(b: Building, rp: ReturnType<typeof roofPlanes>, out: RoofBuf, top: number) {
+function roofFaces(b: Building, rp: RoofPlan, out: RoofBuf, top: number) {
   const rings = [b.outer, ...(b.holes ?? [])];
   const data: number[] = [], holeIdx: number[] = [];
   for (let r = 0; r < rings.length; r++) {
@@ -185,12 +203,13 @@ function roofFaces(b: Building, rp: ReturnType<typeof roofPlanes>, out: RoofBuf,
   } else {
     // Distance roof: refine every triangle to about 1.6 m, lift by the
     // distance field, and shade each small face by its own normal.
-    const H = rp.H, k = rp.k;
-    const lift = (x: number, z: number) => Math.min(H, k * boundaryDist(rings, x, z));
+    const lift = (x: number, z: number) => distanceLift(rp, boundaryDist(rings, x, z));
+    // a dome needs finer facets than a hip to look round
+    const fine = rp.profile === 'hip' ? 1.6 : Math.max(0.35, rp.R / 7);
     const emit = (ax: number, az: number, bx: number, bz: number, cx: number, cz: number, depth: number) => {
       const lab = (ax - bx) ** 2 + (az - bz) ** 2, lbc = (bx - cx) ** 2 + (bz - cz) ** 2, lca = (cx - ax) ** 2 + (cz - az) ** 2;
       const m = Math.max(lab, lbc, lca);
-      if (m > 1.6 * 1.6 && depth < 9) {
+      if (m > fine * fine && depth < 12) {
         // split the longest edge
         if (m === lab) { const mx = (ax + bx) / 2, mz = (az + bz) / 2; emit(ax, az, mx, mz, cx, cz, depth + 1); emit(mx, mz, bx, bz, cx, cz, depth + 1); }
         else if (m === lbc) { const mx = (bx + cx) / 2, mz = (bz + cz) / 2; emit(ax, az, bx, bz, mx, mz, depth + 1); emit(ax, az, mx, mz, cx, cz, depth + 1); }
@@ -216,11 +235,13 @@ function roofFaces(b: Building, rp: ReturnType<typeof roofPlanes>, out: RoofBuf,
 
 /* Walls round one ring. Outer rings run positive (see geom/poly.ts),
    holes negative, so (dz, −dx) points out of the solid either way. */
-function ringWalls(b: Building, r: Ring, rp: ReturnType<typeof roofPlanes>, out: WallBuf) {
+function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
   const n = r.length;
   const base = b.base ?? 0;
   const col = hexRGB(b.colour);
-  const flags = (b.windows === false ? 1 : 0) + (b.kind === 'church' ? 2 : b.kind === 'palace' || b.kind === 'public' ? 4 : 0);
+  // flags: 1 blank, 2 church, 4 grand; 8 × wall style (0 plaster, 1 brick, 2 stone, 3 copper)
+  const style = b.wall === 'brick' ? 1 : b.wall === 'stone' ? 2 : b.wall === 'copper' ? 3 : 0;
+  const flags = (b.windows === false ? 1 : 0) + (b.kind === 'church' ? 2 : b.kind === 'palace' || b.kind === 'public' ? 4 : 0) + 8 * style;
   const seed = (parseInt(b.id.replace(/\D/g, '').slice(-6) || '0', 10) % 997) / 997;
   for (let i = 0; i < n; i += 2) {
     const j = (i + 2) % n;
@@ -274,5 +295,5 @@ export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf) {
 export function roofAt(b: Building, x: number, z: number) {
   const rp = roofPlanes(b);
   if (rp.mode === 'planes') return Math.max(0, envelope(rp.planes, x, z));
-  return Math.min(rp.H, rp.k * boundaryDist([b.outer, ...(b.holes ?? [])], x, z));
+  return distanceLift(rp, boundaryDist([b.outer, ...(b.holes ?? [])], x, z));
 }

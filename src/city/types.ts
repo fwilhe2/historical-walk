@@ -5,18 +5,20 @@
    time from lat/lon.
 
    Rings are flat [x0, z0, x1, z1, …] arrays, not closed (the last
-   point is not repeated), counter-clockwise seen from above
-   (i.e. with x right and z down on a map: clockwise on screen). */
+   point is not repeated). Outer rings have positive area by
+   geom/poly.ts's area(), which is clockwise on a north-up map (and
+   seen from above); holes run the other way. */
 export type Ring = number[];
 
-export type RoofShape = 'flat' | 'gabled' | 'hipped' | 'mansard' | 'pyramidal' | 'dome' | 'half-hipped';
+export type RoofShape = 'flat' | 'gabled' | 'hipped' | 'mansard' | 'pyramidal' | 'dome' | 'spire' | 'half-hipped';
 
 // Where a building's footprint came from, so the HUD and the docs
 // can say how much of what you see is surveyed and how much inferred.
 export type Source =
   | 'osm'        // standing today, mapped in OpenStreetMap, dated or inside the 1903 built-up area
   | 'ohm'        // lost, footprint from OpenHistoricalMap with its dates
-  | 'mtb';       // lost, frontage reconstructed from the 1903 Messtischblatt's built-up block
+  | 'mtb'        // lost, frontage reconstructed from the 1903 Messtischblatt's built-up block
+  | 'model';     // a landmark modelled part by part from its description (tools/history/)
 
 export interface Building {
   id: string;
@@ -35,6 +37,10 @@ export interface Building {
   addr?: string;
   year?: number;          // built (start_date), when known
   kind?: 'church' | 'palace' | 'gate' | 'house' | 'shed' | 'public' | 'colonnade';
+  // Facade drawing: the default is plastered with windows; 'brick'
+  // shows coursed brick (the Dutch Quarter, St. Peter und Paul),
+  // 'stone' ashlar joints, 'copper' plain green sheet (lanterns).
+  wall?: 'plaster' | 'brick' | 'stone' | 'copper';
   windows?: false;        // blank walls (sheds, the city wall's gates, colonnades)
 }
 
@@ -47,6 +53,9 @@ export interface Street { kind: StreetKind; name?: string; w: number; pts: Ring;
 export interface Wall { pts: Ring; h: number; t: number; kind: 'city' | 'garden' | 'quay' }
 export interface Rail { pts: Ring; kind: 'rail' | 'tram' }
 export interface Tree { x: number; z: number; h: number; r: number }
+// A column: a shaft of radius r from base to base + h, with a plinth
+// and a capital; porticos, colonnades and the drums of domes.
+export interface Column { x: number; z: number; r: number; h: number; base: number }
 export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square' }
 
 export interface City {
@@ -62,6 +71,7 @@ export interface City {
   walls: Wall[];
   rails: Rail[];
   trees: Tree[];
+  columns: Column[];
   labels: Label[];
   water: number;                                    // the Havel's level, m (negative: below the streets)
   credits: string[];

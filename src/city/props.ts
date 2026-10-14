@@ -93,3 +93,24 @@ export function buildWalls(city: City) {
   mesh.name = 'walls';
   return mesh;
 }
+
+/* Columns: an instanced shaft, plinth and capital each, in sandstone. */
+export function buildColumns(city: City) {
+  const group = new THREE.Group();
+  group.name = 'columns';
+  const n = city.columns.length;
+  if (!n) return group;
+  const mat = new THREE.MeshStandardMaterial({ color: 0xe4d8be, roughness: 0.85 });
+  const shaft = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.88, 1, 1, 16).translate(0, 0.5, 0), mat, n);
+  const plinth = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), mat, n);
+  const capital = new THREE.InstancedMesh(new THREE.CylinderGeometry(1.45, 0.95, 1, 16).translate(0, 0.5, 0), mat, n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
+  city.columns.forEach((c, i) => {
+    const ph = Math.min(0.6, c.h * 0.05), ch = Math.min(1.4, c.h * 0.1);
+    plinth.setMatrixAt(i, m.compose(t.set(c.x, c.base, c.z), q, s.set(c.r * 2.5, ph, c.r * 2.5)));
+    shaft.setMatrixAt(i, m.compose(t.set(c.x, c.base + ph, c.z), q, s.set(c.r, c.h - ph - ch, c.r)));
+    capital.setMatrixAt(i, m.compose(t.set(c.x, c.base + c.h - ch, c.z), q, s.set(c.r, ch, c.r)));
+  });
+  for (const x of [shaft, plinth, capital]) { x.castShadow = x.receiveShadow = true; group.add(x); }
+  return group;
+}

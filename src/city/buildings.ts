@@ -41,18 +41,44 @@ function facadeMaterial() {
         float flags = floor(vFac.w), seed = fract(vFac.w);
         bool blank = mod(flags, 2.0) >= 1.0;
         bool church = mod(floor(flags / 2.0), 2.0) >= 1.0;
-        bool grand = flags >= 4.0;
+        bool grand = mod(floor(flags / 4.0), 2.0) >= 1.0;
+        float style = floor(flags / 8.0);
         vec3 plaster = diffuseColor.rgb;
         // weathering: faint vertical streaks and a darker foot
         float streak = fHash(vec2(floor(u * 1.7), seed * 91.0));
         plaster *= 0.94 + 0.06 * streak;
         plaster *= mix(0.86, 1.0, smoothstep(0.0, 2.5, y));
-        vec3 col = plaster;
-        float rough = 0.92;
         float aa = max(fwidth(u), fwidth(y)) * 0.75 + 0.002;
+        float rough = 0.92;
+        if (style > 0.5 && style < 1.5) {
+          // brick: courses of 7.5 cm, stretchers of 25 cm, pale mortar
+          float ch = 0.075, bl = 0.25;
+          float row = floor(y / ch);
+          float bx = u / bl + 0.5 * mod(row, 2.0);
+          float tone = fHash(vec2(floor(bx), row));
+          float fade = smoothstep(0.012, 0.03, aa);
+          float mortar = 1.0 - smoothstep(0.0, 0.14 + aa / ch, min(fract(y / ch), 1.0 - fract(y / ch)))
+                       * smoothstep(0.0, 0.06 + aa / bl, min(fract(bx), 1.0 - fract(bx)));
+          vec3 b = plaster * (0.82 + 0.3 * tone);
+          plaster = mix(mix(b, vec3(0.62, 0.6, 0.55), mortar * 0.8), plaster * 1.02, fade);
+        } else if (style > 1.5 && style < 2.5) {
+          // ashlar: courses of 60 cm, blocks of 1.2 m, fine joints
+          float row = floor(y / 0.6);
+          float bx = u / 1.2 + 0.5 * mod(row, 2.0);
+          float tone = fHash(vec2(floor(bx), row));
+          float joint = 1.0 - smoothstep(0.0, 0.025 + aa / 0.6, min(fract(y / 0.6), 1.0 - fract(y / 0.6)))
+                      * smoothstep(0.0, 0.012 + aa / 1.2, min(fract(bx), 1.0 - fract(bx)));
+          plaster *= (0.93 + 0.1 * tone) * (1.0 - 0.28 * joint);
+        } else if (style > 2.5) {
+          // copper sheet: standing seams every 60 cm, streaks of patina
+          float seam = 1.0 - smoothstep(0.0, 0.03 + aa, abs(fract(u / 0.6) - 0.5) * 0.6 - 0.27);
+          plaster *= (0.9 + 0.15 * fHash(vec2(floor(u / 0.6), 3.0))) * (1.0 - 0.25 * seam);
+          rough = 0.55;
+        }
+        vec3 col = plaster;
 
         // stone plinth
-        float plinth = 1.0 - smoothstep(0.55 - aa, 0.6 + aa, y);
+        float plinth = (1.0 - smoothstep(0.55 - aa, 0.6 + aa, y)) * step(style, 2.5) * step(y, 2.0);
         col = mix(col, vec3(0.42, 0.40, 0.37) * (0.9 + 0.1 * streak), plinth);
 
         // cornice: a light band and its shadow line just under the eaves
