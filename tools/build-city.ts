@@ -96,7 +96,10 @@ function toBuilding(f: Feature, src: 'osm' | 'ohm'): Building[] {
     const lv = levels ?? defaultLevels(t, kind, Math.abs(area(outer)));
     let eave = h !== undefined ? h : lv * storey + 0.6;
     let roofH = num(t['roof:height']) ?? (roofLevels !== undefined ? roofLevels * 2.8 : 0);
-    if (shape !== 'flat' && roofH === 0) roofH = Math.min(depth * 0.5, 9) * (shape === 'mansard' ? 0.9 : 0.95);
+    // a pitched roof's height from its depth; roof:levels (a storey in
+    // the roof) only ever raises it — 2.8 m a level alone made the Dutch
+    // Quarter's steep roofs into low lids
+    if (shape !== 'flat' && num(t['roof:height']) === undefined) roofH = Math.max(roofH, Math.min(depth * 0.5, 9) * (shape === 'mansard' ? 0.9 : 0.95));
     if (shape === 'flat') roofH = 0;
     if (h !== undefined) eave = Math.max(2.5, h - roofH);
     const seed = hashStr(f.id);

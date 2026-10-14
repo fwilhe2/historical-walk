@@ -346,6 +346,7 @@ const DW = 1.5, DH = 1.6;   // dormer width, front wall height (m)
 function dormers(b: Building, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf) {
   if (rp.mode !== 'planes' || !rp.box || (b.roof !== 'gabled' && b.roof !== 'mansard' && b.roof !== 'hipped' && b.roof !== 'half-hipped')) return;
   if ((b.kind && b.kind !== 'house') || b.wall === 'copper' || rp.H < 3.2 || b.windows === false) return;
+  if (b.wall === 'brick') { dutchGables(b, rp, walls); return; }
   const { cx, cz, ang, A, B } = rp.box;
   if (A < 4 || B < 4) return;
   const c = Math.cos(ang), s = Math.sin(ang);
@@ -407,6 +408,58 @@ function dormers(b: Building, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf) {
       };
       rq(el, rg, rg2, bl2);
       rq(rg, er, br2, rg2);
+    }
+  }
+}
+
+/* ── Dutch gables ─────────────────────────────────────────────────
+   The houses of the Dutch Quarter (1734–42) carry, instead of
+   dormers, a gable in the middle of each long side that rises flush
+   from the facade to near the ridge, its outline a bell: straight
+   cheeks, a concave then convex sweep, a small cap. Built as a wall
+   (earcut over its outline, brick by the facade shader) standing
+   before the main roof's slope. */
+function dutchGables(b: Building, rp: RoofPlan, walls: WallBuf) {
+  const { cx, cz, ang, A, B } = rp.box!;
+  if (2 * A < 6.5) return;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const wallCol = hexRGB(b.colour);
+  const top = b.eave + rp.H - 0.6;           // the cap stands a little below the ridge
+  const w = Math.min(3.6, 2 * A * 0.4);
+  // the outline, in (across, up) from the gable's foot at the eave
+  const H = top - b.eave, prof: [number, number][] = [];
+  const N = 10;
+  for (let k = 0; k <= N; k++) {
+    const t = k / N;
+    // half-width shrinks from w/2 to 0.35 m along a bell
+    const hw = 0.35 + (w / 2 - 0.35) * (1 - (3 * t * t - 2 * t * t * t)) + 0.12 * Math.sin(t * Math.PI * 2) * (1 - t);
+    prof.push([hw, t * H]);
+  }
+  for (const sg of [1, -1]) {
+    const v = sg * B;
+    const P = (du: number, y: number, dv = 0): number[] => [cx + du * c - (v - sg * dv) * s, y, cz + du * s + (v - sg * dv) * c];
+    // must stand on the real outline there
+    const foot = P(0, 0), mx = foot[0]!, mz = foot[2]!;
+    if (!insideRing(b.outer, mx - (-s) * sg * 0.3, mz - c * sg * 0.3)) continue;
+    const outline: number[][] = [];
+    for (const [hw, y] of prof) outline.push([hw, b.eave + y]);
+    for (let k = prof.length - 1; k >= 0; k--) outline.push([-prof[k]![0], b.eave + prof[k]![1]]);
+    outline.push([-w / 2, b.eave - 0.01], [w / 2, b.eave - 0.01]);
+    const flat2 = outline.flatMap(([u, y]) => [u!, y!]);
+    const tris = earcut(flat2, null, 2);
+    const nx = -s * sg, nz = c * sg;
+    const fac = [top + 0.2, b.storey, w, 8 + 128 * SRC_CODE[b.src]];   // brick, its windows in the rows of the storeys below
+    for (let t = 0; t < tris.length; t += 3) {
+      const pts = [tris[t]!, tris[t + 1]!, tris[t + 2]!].map((k) => P(flat2[2 * k]!, flat2[2 * k + 1]!, 0.02));
+      const e1 = [pts[1]![0]! - pts[0]![0]!, pts[1]![1]! - pts[0]![1]!, pts[1]![2]! - pts[0]![2]!], e2 = [pts[2]![0]! - pts[0]![0]!, pts[2]![1]! - pts[0]![1]!, pts[2]![2]! - pts[0]![2]!];
+      const cr = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+      const order = cr[0]! * nx + cr[2]! * nz >= 0 ? [0, 1, 2] : [0, 2, 1];
+      for (const q of order) {
+        const p = pts[q]!;
+        const u = (p[0]! - cx) * c + (p[2]! - cz) * s;
+        walls.pos.push(p[0]!, p[1]!, p[2]!); walls.nrm.push(nx, 0, nz); walls.uv.push(u + 50, p[1]!);
+        walls.fac.push(...fac); walls.col.push(wallCol[0], wallCol[1], wallCol[2]);
+      }
     }
   }
 }
