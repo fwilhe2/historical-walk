@@ -31,6 +31,28 @@ export const hemi = new THREE.HemisphereLight(0xfff0dc, 0xb59a78, 0.3);
 scene.add(hemi);
 scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00065);
 
+/* Stars for the night: points on a far sphere, fading in as the sky
+   darkens below civil twilight. */
+export const stars = (() => {
+  const n = 2500, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  let seed = 3;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) {
+    const z = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - z * z);
+    pos.set([r * Math.cos(a) * 4000, Math.abs(z) * 4000 + 60, r * Math.sin(a) * 4000], i * 3);
+    const b = Math.pow(rnd(), 3) * 0.9 + 0.1;
+    col.set([b, b, b * (0.9 + rnd() * 0.2)], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false });
+  const p = new THREE.Points(g, m);
+  p.renderOrder = -1;
+  scene.add(p);
+  return p;
+})();
+
 export const SUN_DIR = new THREE.Vector3();
 export const sunState = { hour: 17.5, day: 172 };   // day of year (21 June)
 
@@ -62,8 +84,9 @@ export function updateSun(lat: number) {
   // The sky's own light comes from the environment map (main.ts); the
   // hemisphere only adds the warm bounce off sunlit streets and walls.
   hemi.intensity = 0.05 + 0.3 * day * Math.min(1, e * 3);
+  (stars.material as THREE.PointsMaterial).opacity = THREE.MathUtils.smoothstep(-alt, 0.06, 0.2);
   const fog = scene.fog as THREE.FogExp2;
-  fog.color.setRGB(0.78, 0.82, 0.86).lerp(new THREE.Color(0.95, 0.72, 0.55), Math.max(0, 1 - e * 4) * day * 0.5).multiplyScalar(0.25 + 0.75 * day);
+  fog.color.setRGB(0.78, 0.82, 0.86).lerp(new THREE.Color(0.95, 0.72, 0.55), Math.max(0, 1 - e * 4) * day * 0.5).multiplyScalar(0.03 + 0.97 * day);
   return alt;
 }
 

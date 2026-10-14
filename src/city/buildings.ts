@@ -16,7 +16,10 @@ import type { Building } from './types';
 
 const TILE = 200;
 
+// 0 by day, 1 at night: lights in a share of the windows (main.ts sets it).
+export const nightLight = { value: 0 };
 const FACADE_PARS = /* glsl */ `
+uniform float uNight;
 varying vec4 vFac;
 varying vec2 vWall;
 float fHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -50,6 +53,7 @@ function facadeMaterial() {
         plaster *= mix(0.86, 1.0, smoothstep(0.0, 2.5, y));
         float aa = max(fwidth(u), fwidth(y)) * 0.75 + 0.002;
         float rough = 0.92;
+        float litWin = 0.0;
         if (style > 0.5 && style < 1.5) {
           // brick: courses of 7.5 cm, stretchers of 25 cm, pale mortar
           float ch = 0.075, bl = 0.25;
@@ -156,11 +160,16 @@ function facadeMaterial() {
             vec3 glass = vec3(0.035, 0.04, 0.05) + 0.05 * fHash(vec2(bi, si + seed * 31.0));
             col = mix(col, mix(glass, frameC * 0.9, bars), inner);
             rough = mix(rough, mix(0.08, 0.6, bars), inner);
+            // about a third of the rooms have a lamp lit at night
+            float on = step(fHash(vec2(bi * 1.7 + seed * 13.0, si * 3.1 + L)), 0.33);
+            litWin = inner * (1.0 - bars) * on;
           }
         }
         diffuseColor.rgb = col;
       `)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rough;');
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = rough;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.6, 0.28) * litWin * uNight * 1.4;');
+    sh.uniforms.uNight = nightLight;
   };
   m.customProgramCacheKey = () => 'facade';
   return m;

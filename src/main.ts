@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { buildBuildings } from './city/buildings';
+import { buildBuildings, nightLight } from './city/buildings';
 import { buildGround } from './city/ground';
 import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
@@ -111,6 +111,23 @@ if (probe) {
   };
 }
 
+/* ── Lamplight ───────────────────────────────────────────────────────
+   The eight lanterns nearest you light the ground for real (point
+   lights, re-chosen as you walk); the rest only glow. */
+const lampLights = Array.from({ length: 8 }, () => {
+  const l = new THREE.PointLight(0xffb060, 0, 22, 2);
+  scene.add(l);
+  return l;
+});
+let lampT = 0;
+function placeLampLights(glow: number) {
+  for (const l of lampLights) l.intensity = glow * 40;
+  if (glow <= 0 || (lampT -= 1 / 60) > 0) return;
+  lampT = 0.5;
+  const near = city.lamps.map((l) => ({ l, d: (l.x - walker.x) ** 2 + (l.z - walker.z) ** 2 })).sort((a, b) => a.d - b.d).slice(0, lampLights.length);
+  near.forEach((n, i) => lampLights[i]!.position.set(n.l.x, 3.4, n.l.z));
+}
+
 /* ── Sound's view of the town ──────────────────────────────────────
    Steps as the walker lands them; birds by the trees within 35 m
    (counted once a second); bells from the towers: the hours from the
@@ -156,6 +173,8 @@ renderer.setAnimationLoop(() => {
   const alt = updateSun(LAT);
   // the lamplighter comes round as the sun goes down
   lampGlow.value = THREE.MathUtils.smoothstep(-alt, -0.05, 0.08);
+  nightLight.value = THREE.MathUtils.smoothstep(-alt, -0.02, 0.12);
+  placeLampLights(lampGlow.value);
   updateEnv();
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
