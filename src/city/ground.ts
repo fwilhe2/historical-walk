@@ -123,8 +123,9 @@ export function buildGround(city: City): Ground {
   tR.flipY = false; tR.colorSpace = THREE.NoColorSpace;
   // The plane covers the region and a little more, as plain fields.
   const M = 600;
-  // A 20 m grid, lifted onto the terrain (flat in the town).
-  const geo = new THREE.PlaneGeometry(RW + 2 * M, RH + 2 * M, Math.ceil((RW + 2 * M) / 20), Math.ceil((RH + 2 * M) / 20));
+  // A 40 m grid lifted onto the terrain (flat in the town): the hills
+  // are seen from a distance, where 40 m facets are fine.
+  const geo = new THREE.PlaneGeometry(RW + 2 * M, RH + 2 * M, Math.ceil((RW + 2 * M) / 40), Math.ceil((RH + 2 * M) / 40));
   geo.rotateX(-Math.PI / 2);
   geo.translate(r0 + RW / 2, 0, q0 + RH / 2);
   const gp = geo.attributes.position!;
