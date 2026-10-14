@@ -94,6 +94,8 @@ export const POTSDAM: History = {
     'ohm:r2854909': { eave: 8.4, roof: 'mansard', roofH: 5, kind: 'house', storey: 3.9 },
     // The Marstall: one tall storey of arched windows under a mansard,
     // Knobelsdorff's horse-tamers on the roof. Estimated.
+    // The orphanage: four storeys under a mansard (Gontard 1771–78).
+    'w28490429': { eave: 17.8, roof: 'mansard', roofH: 5.5, storey: 4.3, kind: 'palace' },
     'ohm:r2854322': { eave: 8.5, roof: 'mansard', roofH: 5.5, kind: 'palace', storey: 7.9 },
     // Gates drawn as buildings: stone, no windows.
     'ohm:w201138821': { eave: 9, roof: 'flat', roofH: 0, windows: false, wall: 'stone', kind: 'gate', colour: '#e3d8c0' },

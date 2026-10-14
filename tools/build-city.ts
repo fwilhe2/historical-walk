@@ -212,9 +212,11 @@ for (const lm of hist.landmarks) {
   if (!hits.length) { console.warn('landmark without footprint:', lm.id); continue; }
   hits.sort((a, b) => Math.abs(area(b.outer)) - Math.abs(area(a.outer)));
   const ring = hits[0]!.outer;
-  const gone = new Set(hits);
-  for (const b of buildings) { const [x, z] = centroid(b.outer); if (inside(ring, x, z)) gone.add(b); }
-  for (let i = buildings.length - 1; i >= 0; i--) if (gone.has(buildings[i]!)) buildings.splice(i, 1);
+  if (!lm.keep) {
+    const gone = new Set(hits);
+    for (const b of buildings) { const [x, z] = centroid(b.outer); if (inside(ring, x, z)) gone.add(b); }
+    for (let i = buildings.length - 1; i >= 0; i--) if (gone.has(buildings[i]!)) buildings.splice(i, 1);
+  }
   const P = new Parts(lm.id, frame(ring, lm.front), lm.name, lm.year);
   lm.build(P, ring);
   if (lm.about) abouts.set(lm.name, lm.about);

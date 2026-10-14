@@ -239,4 +239,25 @@ export const LANDMARKS: Landmark[] = [
       P.ngon(0, f, 0.6, 8, 17.2, 20.2, { colour: '#cfc3a8', wall: 'stone', windows: false, roof: 'spire', roofH: 0.6, roofColour: '#cfc3a8' });
     },
   },
+  {
+    /* The Great Military Orphanage, rebuilt by Carl von Gontard
+       1771–78, four storeys round its courts. Over the main staircase
+       in the middle of the Lindenstraße wing stands a round temple
+       (Monopteros) of 26 m carrying the gilded Caritas, 3.75 m, 46 m
+       above the street (de.wikipedia, potsdam.de 2024). The building
+       stands today and keeps its mapped outline; the tower's plan and
+       the base's height are estimates. */
+    id: 'waisenhaus', name: 'Großes Militär-Waisenhaus', year: 1778, at: [-655, -143], front: 270, keep: true,
+    build(P) {
+      const [u, f] = P.F.local(-656, -143);
+      const s = { colour: '#e0d2b0', wall: 'stone' as const, windows: false as const };
+      P.box(u, f + 1, 10, 10, 0, 23, { colour: '#dccaa4', kind: 'palace', storey: 4.6 });
+      P.ngon(u, f + 1, 4.6, 16, 23, 24.2, s);
+      P.colonnade(u, f + 1, 3.7, 8, 0.42, 8.5, 24.2);
+      P.ngon(u, f + 1, 4.4, 16, 32.7, 34.2, s);
+      P.ngon(u, f + 1, 4.2, 16, 34.2, 34.4, { ...s, roof: 'dome', roofH: 5.6, roofColour: '#6f9a85', wall: 'copper' });
+      P.ngon(u, f + 1, 0.9, 8, 40, 42.25, { colour: '#d4af37', wall: 'copper', windows: false });
+      P.ngon(u, f + 1, 0.45, 8, 42.25, 45.2, { colour: '#d4af37', wall: 'copper', windows: false, roof: 'dome', roofH: 0.8, roofColour: '#d4af37' });
+    },
+  },
 ];

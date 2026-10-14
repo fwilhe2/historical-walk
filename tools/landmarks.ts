@@ -15,6 +15,7 @@ export interface Frame {
   rx: number; rz: number;     // unit vector to the right of someone standing before the front, facing it
   front: number; back: number; left: number; right: number;   // extents from the centre, m
   at(u: number, f: number): [number, number];                 // local (u right, f toward the front) → world
+  local(x: number, z: number): [number, number];              // world → local
 }
 
 /* The frame of a footprint whose front faces about the given bearing
@@ -41,7 +42,11 @@ export function frame(ring: Ring, bearing: number): Frame {
     front = Math.max(front, f); back = Math.max(back, -f);
     right = Math.max(right, u); left = Math.max(left, -u);
   }
-  return { cx, cz, fx, fz, rx, rz, front, back, left, right, at: (u, f) => [cx + rx * u + fx * f, cz + rz * u + fz * f] };
+  return {
+    cx, cz, fx, fz, rx, rz, front, back, left, right,
+    at: (u, f) => [cx + rx * u + fx * f, cz + rz * u + fz * f],
+    local: (x, z) => [(x - cx) * rx + (z - cz) * rz, (x - cx) * fx + (z - cz) * fz],
+  };
 }
 
 export interface PartStyle {
@@ -136,6 +141,9 @@ export interface Landmark {
   front: number;                  // bearing its front faces, degrees
   build(P: Parts, ring: Ring): void;
   about?: string;                 // a sentence or two for the HUD, from the cited sources
+  // Keep the mapped building and only add the parts (a tower on a
+  // building that stands today); its own name and patch still apply.
+  keep?: boolean;
   // Remove every other building whose centre is inside this ring
   // (local metres) — parts of the same landmark mapped separately.
   clear?: Ring;
