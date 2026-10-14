@@ -29,7 +29,7 @@ describe('roofs', () => {
     for (const roof of ['gabled', 'hipped', 'mansard', 'half-hipped', 'pyramidal', 'flat'] as const) {
       const b = house({ roof, outer: [0, 0, 20, 0, 22, 6, 18, 11, 1, 10] });   // not a rectangle
       const w = wallBuf(), r = roofBuf();
-      buildMassing(b, w, r);
+      buildMassing(b, w, r, false);
       // projected roof area equals the footprint's
       let a = 0;
       for (let i = 0; i < r.pos.length; i += 9) {
@@ -50,7 +50,7 @@ describe('roofs', () => {
   it('walls face out of the building', () => {
     const b = house();
     const w = wallBuf(), r = roofBuf();
-    buildMassing(b, w, r);
+    buildMassing(b, w, r, false);
     for (let i = 0; i < w.pos.length; i += 9) {
       const p = w.pos.slice(i, i + 9);
       const e1 = [p[3]! - p[0]!, p[4]! - p[1]!, p[5]! - p[2]!], e2 = [p[6]! - p[0]!, p[7]! - p[1]!, p[8]! - p[2]!];
@@ -59,6 +59,38 @@ describe('roofs', () => {
       expect(n[0]! * cx + n[2]! * cz).toBeGreaterThan(0);
       // and the stored normal agrees with the winding
       expect(n[0]! * w.nrm[i]! + n[2]! * w.nrm[i + 2]!).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('dormers', () => {
+  it('stand on both long slopes of a townhouse, facing out, their sills on the roof', () => {
+    const b = house();
+    const w = wallBuf(), r = roofBuf();
+    buildMassing(b, w, r);
+    const w0 = wallBuf();
+    buildMassing(b, w0, roofBuf(), false);
+    expect(w.pos.length).toBeGreaterThan(w0.pos.length);
+    let fronts = 0;
+    for (let i = w0.pos.length; i < w.pos.length; i += 9) {
+      const fac = i / 3 * 4;   // aFac of the triangle's first vertex
+      if (w.fac[fac + 3]! < 32) continue;
+      const nz = w.nrm[i + 2]!, z = w.pos[i + 2]!;
+      if (Math.abs(nz) < 0.9) continue;          // a cheek
+      fronts++;
+      expect(Math.sign(nz)).toBe(z > 5 ? 1 : -1);   // faces away from the ridge (z = 5)
+      const sill = w.fac[fac + 1]!;
+      expect(sill - b.eave).toBeCloseTo(roofAt(b, w.pos[i]!, z), 1);
+    }
+    expect(fronts).toBeGreaterThan(0);
+  });
+  it('leave churches, palaces and flat roofs alone', () => {
+    for (const over of [{ kind: 'church' as const }, { kind: 'palace' as const }, { roof: 'flat' as const }]) {
+      const b = house(over);
+      const a = wallBuf(), c = wallBuf();
+      buildMassing(b, a, roofBuf());
+      buildMassing(b, c, roofBuf(), false);
+      expect(a.pos.length).toBe(c.pos.length);
     }
   });
 });

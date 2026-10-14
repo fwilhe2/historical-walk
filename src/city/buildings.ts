@@ -79,10 +79,12 @@ function facadeMaterial() {
 
         // stone plinth
         float plinth = (1.0 - smoothstep(0.55 - aa, 0.6 + aa, y)) * step(style, 2.5) * step(y, 2.0);
+        if (style > 3.5) plinth = 0.0;
         col = mix(col, vec3(0.42, 0.40, 0.37) * (0.9 + 0.1 * streak), plinth);
 
         // cornice: a light band and its shadow line just under the eaves
         float cTop = eave, cBot = eave - 0.45;
+        if (style > 3.5) { cTop = -1.0; cBot = -2.0; }
         float cor = smoothstep(cBot - aa, cBot + aa, y) * (1.0 - smoothstep(cTop - aa, cTop + aa, y));
         col = mix(col, plaster * 1.12 + 0.03, cor);
         col *= 1.0 - 0.35 * smoothstep(cBot - 0.12 - aa, cBot - 0.12 + aa, y) * (1.0 - smoothstep(cBot - aa, cBot + aa, y));
@@ -92,6 +94,19 @@ function facadeMaterial() {
           col *= 1.0 - 0.12 * (smoothstep(0.0, aa * 2.0, fy) * (1.0 - smoothstep(0.18, 0.18 + aa * 2.0, fy)));
         }
 
+        // a dormer's front: one window filling it (aFac: top, bottom, width)
+        bool dormer = style > 3.5;
+        if (dormer) {
+          vec2 p = vec2(u - L * 0.5, y);
+          float lo = storey, hi = eave;
+          float inner = fBox(p, vec2(-0.38, lo + 0.28), vec2(0.38, hi - 0.18), aa);
+          float outer = fBox(p, vec2(-0.48, lo + 0.18), vec2(0.48, hi - 0.08), aa);
+          vec3 frameC = mix(plaster * 1.15, vec3(0.86, 0.84, 0.8), 0.6);
+          col = mix(col, frameC, outer);
+          float bars = 1.0 - smoothstep(0.02, 0.02 + aa, abs(p.x));
+          col = mix(col, mix(vec3(0.04, 0.045, 0.055), frameC, bars), inner);
+          rough = mix(rough, 0.1, inner * (1.0 - bars));
+        }
         // window bays
         float bay = church ? 5.5 : grand ? 4.0 : mix(2.9, 3.5, seed);
         float nb = max(1.0, floor(L / bay));
@@ -105,7 +120,7 @@ function facadeMaterial() {
         float wh = church ? storey * 0.75 : storey - 1.45;
         float wy0 = church ? storey * 0.15 : 0.95;
         // a window row only where the whole window fits below the cornice
-        bool fits = !blank && L > 2.0 && fy > 0.0 && 0.6 + si * storey + wy0 + wh < eave - 0.45;
+        bool fits = !blank && !dormer && L > 2.0 && fy > 0.0 && 0.6 + si * storey + wy0 + wh < eave - 0.45;
         // the door: ground storey, the middle bay of a long enough wall
         bool door = !blank && si < 0.5 && nb >= 3.0 && abs(bi - floor(nb / 2.0)) < 0.5 && L > 7.0;
         if (fits) {

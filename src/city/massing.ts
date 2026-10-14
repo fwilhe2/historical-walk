@@ -44,7 +44,10 @@ export function hexRGB(hex: string): [number, number, number] {
    'spire' H·d/R                       a pyramid of as many faces as the outline has sides
    R is the outline's inradius, about the rectangle's half-width. */
 export type Profile = 'hip' | 'dome' | 'spire';
-export interface RoofPlan { planes: Plane[]; mode: 'planes' | 'distance'; H: number; k: number; profile: Profile; R: number }
+export interface RoofPlan {
+  planes: Plane[]; mode: 'planes' | 'distance'; H: number; k: number; profile: Profile; R: number;
+  box?: { cx: number; cz: number; ang: number; A: number; B: number };   // the rectangle plane roofs are built on
+}
 
 export function roofPlanes(b: Building): RoofPlan {
   const H = b.roofH;
@@ -96,7 +99,7 @@ export function roofPlanes(b: Building): RoofPlan {
       break;
     }
   }
-  return { planes, mode: 'planes', H, k, ...none };
+  return { planes, mode: 'planes', H, k, ...none, box: { cx: box.cx, cz: box.cz, ang: box.ang, A, B } };
 }
 
 function distanceLift(rp: RoofPlan, d: number) {
@@ -284,11 +287,97 @@ function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
   }
 }
 
-export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf) {
+export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf, withDormers = true) {
   const rp = roofPlanes(b);
   ringWalls(b, b.outer, rp, walls);
   for (const h of b.holes ?? []) ringWalls(b, h, rp, walls);
   roofFaces(b, rp, roofs, b.eave);
+  if (withDormers) dormers(b, rp, walls, roofs);
+}
+
+/* ── Dormers ───────────────────────────────────────────────────────
+   Townhouses' gable and mansard roofs carry a row of dormers along
+   each long side, one about every 3.5 m: a front wall with a window
+   set a little back from the eaves, two triangular cheeks, and a
+   small gable roof that runs back until it meets the main roof. The
+   main roof is not cut — the dormer stands on it, which from the
+   street is the same. */
+const DW = 1.5, DH = 1.6;   // dormer width, front wall height (m)
+function dormers(b: Building, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf) {
+  if (rp.mode !== 'planes' || !rp.box || (b.roof !== 'gabled' && b.roof !== 'mansard' && b.roof !== 'hipped' && b.roof !== 'half-hipped')) return;
+  if ((b.kind && b.kind !== 'house') || b.wall === 'copper' || rp.H < 3.2 || b.windows === false) return;
+  const { cx, cz, ang, A, B } = rp.box;
+  if (A < 4 || B < 4) return;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const W = (u: number, v: number): [number, number] => [cx + u * c - v * s, cz + u * s + v * c];
+  const f = (u: number, v: number) => { const [x, z] = W(u, v); return Math.max(0, envelope(rp.planes, x, z)); };
+  const wallCol = hexRGB(b.colour), roofCol = hexRGB(b.roofColour);
+  // only where the outline really is the rectangle's long side
+  const onOutline = (u: number, v: number) => { const [x, z] = W(u, v); return insideRing(b.outer, x, z); };
+  const n = Math.floor((2 * A - (b.roof === 'gabled' || b.roof === 'mansard' ? 2.5 : 2 * B)) / 3.6);
+  if (n < 1) return;
+  const span = n * 3.6;
+  for (const sg of [1, -1]) {
+    // set back from the eave to where the roof is 0.5 m up (on a mansard, on the steep part)
+    let back = 0.25;
+    while (back < B * 0.5 && f(0, sg * (B - back)) < 0.5) back += 0.05;
+    for (let i = 0; i < n; i++) {
+      const u = -span / 2 + 1.8 + i * 3.6;
+      const vf = sg * (B - back);
+      if (!onOutline(u - DW / 2, sg * (B - 0.1)) || !onOutline(u + DW / 2, sg * (B - 0.1))) continue;
+      const y0 = b.eave + f(u, vf), y1 = y0 + DH, yr = y1 + DW * 0.4;
+      // how far back the main roof reaches a height
+      const reach = (y: number) => { let d = 0; while (d < B && b.eave + f(u, vf - sg * d) < y) d += 0.05; return d; };
+      const d1 = reach(y1), dr = reach(yr);
+      if (back + dr > B - 0.2) continue;   // too flat a roof for a dormer this tall
+      const P = (du: number, dv: number, y: number): number[] => { const [x, z] = W(u + du, vf - sg * dv); return [x, y, z]; };
+      const [nx, nz] = [-s * sg, c * sg];   // outward
+      // front wall and its gable
+      const fl = P(-DW / 2, 0, y0), fr = P(DW / 2, 0, y0), tl = P(-DW / 2, 0, y1), tr = P(DW / 2, 0, y1), tg = P(0, 0, yr);
+      const fac = [y1, y0, DW, 32 + (b.windows === false ? 1 : 0)];
+      const wtri = (a: number[], bb: number[], cc: number[], ua: number[], ub: number[], uc: number[], nn: number[]) => {
+        const e1 = [bb[0]! - a[0]!, bb[1]! - a[1]!, bb[2]! - a[2]!], e2 = [cc[0]! - a[0]!, cc[1]! - a[1]!, cc[2]! - a[2]!];
+        const cr = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+        const flip = cr[0]! * nn[0]! + cr[1]! * nn[1]! + cr[2]! * nn[2]! < 0;
+        const vs = flip ? [[a, ua], [cc, uc], [bb, ub]] : [[a, ua], [bb, ub], [cc, uc]];
+        for (const [p, q] of vs) {
+          walls.pos.push(p![0]!, p![1]!, p![2]!); walls.nrm.push(nn[0]!, nn[1]!, nn[2]!); walls.uv.push(q![0]!, q![1]!);
+          walls.fac.push(...fac); walls.col.push(wallCol[0], wallCol[1], wallCol[2]);
+        }
+      };
+      const out = [nx, 0, nz];
+      wtri(fl, fr, tr, [0, y0], [DW, y0], [DW, y1], out);
+      wtri(fl, tr, tl, [0, y0], [DW, y1], [0, y1], out);
+      wtri(tl, tr, tg, [0, y1], [DW, y1], [DW / 2, yr], out);
+      // cheeks
+      const bl = P(-DW / 2, d1, y1), br = P(DW / 2, d1, y1);
+      wtri(fl, tl, bl, [0, y0], [0, y1], [d1, y1], [-c, 0, -s]);
+      wtri(fr, br, tr, [0, y0], [d1, y1], [0, y1], [c, 0, s]);
+      // the dormer's roof, a little proud of its walls
+      const o = 0.15;
+      const el = P(-DW / 2 - o, -o, y1 - o * 0.8), er = P(DW / 2 + o, -o, y1 - o * 0.8), rg = P(0, -o, yr + 0.05);
+      const bl2 = P(-DW / 2 - o, d1, y1 - o * 0.8), br2 = P(DW / 2 + o, d1, y1 - o * 0.8), rg2 = P(0, dr, yr + 0.05);
+      const rq = (a: number[], bb: number[], cc: number[], d: number[]) => {
+        const e1 = [bb[0]! - a[0]!, bb[1]! - a[1]!, bb[2]! - a[2]!], e2 = [d[0]! - a[0]!, d[1]! - a[1]!, d[2]! - a[2]!];
+        let nn = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+        if (nn[1]! < 0) nn = nn.map((v) => -v);
+        const l = Math.hypot(nn[0]!, nn[1]!, nn[2]!) || 1;
+        pushTri(roofs, [...a, ...bb, ...cc], nn[0]! / l, nn[1]! / l, nn[2]! / l, [0, 0, 1, 0, 1, 1], roofCol);
+        pushTri(roofs, [...a, ...cc, ...d], nn[0]! / l, nn[1]! / l, nn[2]! / l, [0, 0, 1, 1, 0, 1], roofCol);
+      };
+      rq(el, rg, rg2, bl2);
+      rq(rg, er, br2, rg2);
+    }
+  }
+}
+
+function insideRing(r: Ring, x: number, z: number) {
+  let cIn = false;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const xi = r[i]!, zi = r[i + 1]!, xj = r[j]!, zj = r[j + 1]!;
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) cIn = !cIn;
+  }
+  return cIn;
 }
 
 /* The roof's height above the eaves at a point, for tests and probes. */
