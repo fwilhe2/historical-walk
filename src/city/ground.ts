@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from './terrain';
 import type { City, Ring } from './types';
 
 /* ── Ground ─────────────────────────────────────────────────────
@@ -122,9 +123,13 @@ export function buildGround(city: City): Ground {
   tR.flipY = false; tR.colorSpace = THREE.NoColorSpace;
   // The plane covers the region and a little more, as plain fields.
   const M = 600;
-  const geo = new THREE.PlaneGeometry(RW + 2 * M, RH + 2 * M, 1, 1);
+  // A 20 m grid, lifted onto the terrain (flat in the town).
+  const geo = new THREE.PlaneGeometry(RW + 2 * M, RH + 2 * M, Math.ceil((RW + 2 * M) / 20), Math.ceil((RH + 2 * M) / 20));
   geo.rotateX(-Math.PI / 2);
   geo.translate(r0 + RW / 2, 0, q0 + RH / 2);
+  const gp = geo.attributes.position!;
+  for (let i = 0; i < gp.count; i++) gp.setY(i, heightAt(gp.getX(i), gp.getZ(i)));
+  geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
   const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR },
     uB: { value: new THREE.Vector4(x0, z0, W, H) }, uR: { value: new THREE.Vector4(r0, q0, RW, RH) } };

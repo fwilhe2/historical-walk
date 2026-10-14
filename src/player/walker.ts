@@ -1,6 +1,7 @@
 import { keys, look } from './input';
 import { pushOut, type Segs } from './collide';
 import type { Ground } from '../city/ground';
+import { heightAt } from '../city/terrain';
 
 /* ── The walker ─────────────────────────────────────────────────
    A pedestrian of 1900: 1.4 m/s at a stroll, about 2.2 at a brisk
@@ -38,7 +39,7 @@ export function stepWalker(dt: number, segs: Segs, ground: Ground, sens: number)
     w.x += ix * v * dt; w.z += iz * v * dt;
     if (keys.Space) w.flyY += v * dt;
     if (keys.KeyC || keys.ControlLeft) w.flyY = Math.max(EYE, w.flyY - v * dt);
-    w.y += (w.flyY - w.y) * Math.min(1, dt * 4);
+    w.y += (Math.max(w.flyY, heightAt(w.x, w.z) + EYE) - w.y) * Math.min(1, dt * 4);
     w.vx = w.vz = 0;
     return;
   }
@@ -67,6 +68,6 @@ export function stepWalker(dt: number, segs: Segs, ground: Ground, sens: number)
   const amt = Math.min(1, sp / WALK);
   w.bob = -Math.abs(Math.sin(w.phase)) * 0.022 * amt + 0.011 * amt;
   w.sway = Math.sin(w.phase) * 0.015 * amt;
-  w.y += (EYE + w.bob - w.y) * Math.min(1, dt * 12);
+  w.y += (EYE + heightAt(w.x, w.z) + w.bob - w.y) * Math.min(1, dt * 12);
   w.flyY = Math.max(w.flyY, 40);
 }

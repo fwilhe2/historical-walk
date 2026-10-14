@@ -71,6 +71,9 @@ export interface City {
   // over regionBounds; drawn beyond `bounds` only.
   region: Area[];
   regionBounds: [number, number, number, number];
+  // The ground's height above the town's level on a grid (city/terrain.ts):
+  // decimetres as base64 little-endian Int16, row by row from (x0, z0).
+  terrain?: { x0: number; z0: number; step: number; nx: number; nz: number; dm: string };
   spawn: { x: number; z: number; yaw: number };
   buildings: Building[];
   areas: Area[];

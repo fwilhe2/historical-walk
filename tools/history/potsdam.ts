@@ -13,6 +13,7 @@ export const POTSDAM: History = {
   credits: [
     'Map data © OpenStreetMap contributors, ODbL',
     'Historical features: OpenHistoricalMap contributors, CC0',
+    'Elevation: Terrarium tiles, AWS Open Data (Mapzen; SRTM, EU-DEM)',
     'Messtischblatt 3544/3644 (1903): © Staatsbibliothek zu Berlin – Preußischer Kulturbesitz, dl-de/by-2-0, via LGB Brandenburg',
   ],
   // The excise wall's line (OHM, 1733–1905) from the Brandenburger

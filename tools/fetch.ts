@@ -179,9 +179,48 @@ async function region(bb: [number, number, number, number]) {
   return out;
 }
 
+/* Elevation: Terrarium tiles (AWS Open Data; SRTM, EU-DEM and others,
+   via Mapzen) at zoom 13, about 12 m a pixel here, sampled onto a 20 m
+   grid in the local frame over the region box. Stored as metres above
+   sea level, rounded to decimetres, row by row from the north-west. */
+async function dem(bb: [number, number, number, number], origin: [number, number]) {
+  const Z = 13, n = 2 ** Z;
+  const tx = (lon: number) => (lon + 180) / 360 * n;
+  const ty = (lat: number) => (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+  const [s, w, nn, e] = bb;
+  const x0 = Math.floor(tx(w)), x1 = Math.floor(tx(e)), y0 = Math.floor(ty(nn)), y1 = Math.floor(ty(s));
+  const tiles = new Map<string, PNG>();
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    console.log('dem tile', x, y);
+    const r = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${x}/${y}.png`, { headers: { 'User-Agent': UA } });
+    if (!r.ok) throw new Error('dem ' + r.status);
+    tiles.set(x + ',' + y, PNG.sync.read(Buffer.from(await r.arrayBuffer())));
+  }
+  const height = (lat: number, lon: number) => {
+    const fx = tx(lon), fy = ty(lat);
+    const sample = (X: number, Y: number) => {
+      const t = tiles.get(Math.floor(X / 256) + ',' + Math.floor(Y / 256))!;
+      const i = ((Y % 256) * 256 + (X % 256)) * 4;
+      return t.data[i]! * 256 + t.data[i + 1]! + t.data[i + 2]! / 256 - 32768;
+    };
+    const X = fx * 256 - 0.5, Y = fy * 256 - 0.5, ix = Math.floor(X), iy = Math.floor(Y), u = X - ix, v = Y - iy;
+    return (sample(ix, iy) * (1 - u) + sample(ix + 1, iy) * u) * (1 - v) + (sample(ix, iy + 1) * (1 - u) + sample(ix + 1, iy + 1) * u) * v;
+  };
+  const { fwd, inv } = projector(origin[0], origin[1]);
+  const [gx0, gz0] = fwd(nn, w), [gx1, gz1] = fwd(s, e);
+  const step = 20, nx = Math.floor((gx1 - gx0) / step) + 1, nz = Math.floor((gz1 - gz0) / step) + 1;
+  const h: number[] = [];
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const [lat, lon] = inv(gx0 + i * step, gz0 + j * step);
+    h.push(Math.round(height(lat, lon) * 10) / 10);
+  }
+  return { x0: Math.round(gx0), z0: Math.round(gz0), step, nx, nz, h };
+}
+
 const which = process.argv[3];
 if (!which || which === 'osm') writeFileSync(`${dir}/osm.json`, JSON.stringify(await osm(city.bbox, 0.006)));
 if (!which || which === 'ohm') writeFileSync(`${dir}/ohm.json`, JSON.stringify(await ohm(city.bbox)));
 if ((!which || which === 'region') && city.region) writeFileSync(`${dir}/region.json`, JSON.stringify(await region(city.region)));
+if ((!which || which === 'dem') && city.region) writeFileSync(`${dir}/dem.json`, JSON.stringify(await dem(city.region, city.origin)));
 if ((!which || which === 'map') && city.map) writeFileSync(`${dir}/${city.map.file}`, await historicalMap(city.map, city.bbox, city.origin));
 console.log('done');

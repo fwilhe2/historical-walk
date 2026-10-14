@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import earcut from 'earcut';
+import { heightAt } from './terrain';
 import type { City } from './types';
 
 /* ── Trees and walls ────────────────────────────────────────────
@@ -101,9 +102,10 @@ export function buildTrees(city: City) {
   city.trees.forEach((tr, i) => {
     const trunkH = tr.h * 0.42;
     q.setFromAxisAngle(t.set(0, 1, 0), (i * 2.399) % (Math.PI * 2));
-    m.compose(t.set(tr.x, 0, tr.z), q, s.set(1 + tr.r * 0.08, trunkH, 1 + tr.r * 0.08));
+    const gy = heightAt(tr.x, tr.z);
+    m.compose(t.set(tr.x, gy, tr.z), q, s.set(1 + tr.r * 0.08, trunkH, 1 + tr.r * 0.08));
     trunk.setMatrixAt(i, m);
-    m.compose(t.set(tr.x, trunkH + (tr.h - trunkH) * 0.45, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
+    m.compose(t.set(tr.x, gy + trunkH + (tr.h - trunkH) * 0.45, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
     crown.setMatrixAt(i, m);
     const k = (i * 0.618) % 1;
     crown.setColorAt(i, col.setRGB(0.62 + 0.22 * k, 0.66 + 0.14 * k, 0.5 + 0.15 * (1 - k)));
@@ -152,7 +154,7 @@ function wallGeometry(list: City['walls'], thick: boolean) {
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], n: number[], u0: number, u1: number) => {
     for (const [p, u] of [[a, [u0, a[1]!]], [b, [u0, b[1]!]], [c, [u1, c[1]!]], [a, [u0, a[1]!]], [c, [u1, c[1]!]], [d, [u1, d[1]!]]] as [number[], number[]][]) {
-      pos.push(p[0]!, p[1]!, p[2]!); nrm.push(n[0]!, n[1]!, n[2]!); uv.push(u[0]!, u[1]!);
+      pos.push(p[0]!, p[1]! + heightAt(p[0]!, p[2]!), p[2]!); nrm.push(n[0]!, n[1]!, n[2]!); uv.push(u[0]!, u[1]!);
     }
   };
   for (const w of list) {
@@ -229,7 +231,7 @@ export function buildLamps(city: City) {
   const m = new THREE.Matrix4();
   for (const [g, mat] of parts) {
     const inst = new THREE.InstancedMesh(g, mat, n);
-    city.lamps.forEach((l, i) => inst.setMatrixAt(i, m.makeTranslation(l.x, 0, l.z)));
+    city.lamps.forEach((l, i) => inst.setMatrixAt(i, m.makeTranslation(l.x, heightAt(l.x, l.z), l.z)));
     inst.castShadow = mat === iron;
     group.add(inst);
   }
@@ -254,7 +256,7 @@ export function buildRails(city: City) {
         const [x0, z0, x1, z1] = q(off - W), [x2, z2, x3, z3] = q(off + W);
         // two triangles facing up
         for (const [x, z] of [[x0, z0], [x3, z3], [x1, z1], [x0, z0], [x2, z2], [x3, z3]] as [number, number][]) {
-          pos.push(x, 0.012, z); nrm.push(0, 1, 0);
+          pos.push(x, 0.012 + heightAt(x, z), z); nrm.push(0, 1, 0);
         }
       }
     }
@@ -290,14 +292,14 @@ export function buildWoods(city: City) {
       // the sides lean in a little toward the top, like a forest edge
       const tx = -nx * 3, tz = -nz * 3;
       for (const [x, y, z] of [[ax, 0, az], [bx, 0, bz], [bx + tx, H, bz + tz], [ax, 0, az], [bx + tx, H, bz + tz], [ax + tx, H, az + tz]] as const) {
-        pos.push(x, y, z); nrm.push(nx, 0.3, nz);
+        pos.push(x, y + heightAt(x, z), z); nrm.push(nx, 0.3, nz);
       }
     }
     const data = [...r], holes: number[] = [];
     for (const h of a.holes ?? []) { holes.push(data.length / 2); data.push(...h); }
     const tris = earcut(data, holes.length ? holes : null, 2);
     for (let t = 0; t < tris.length; t += 3) {
-      for (const k of [tris[t]!, tris[t + 2]!, tris[t + 1]!]) { pos.push(data[2 * k]!, H, data[2 * k + 1]!); nrm.push(0, 1, 0); }
+      for (const k of [tris[t]!, tris[t + 2]!, tris[t + 1]!]) { pos.push(data[2 * k]!, H + heightAt(data[2 * k]!, data[2 * k + 1]!), data[2 * k + 1]!); nrm.push(0, 1, 0); }
     }
   }
   const g = new THREE.BufferGeometry();

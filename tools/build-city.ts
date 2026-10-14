@@ -737,12 +737,62 @@ if (spec.region && existsSync(`data/${id}/region.json`)) {
   region.sort((a, b) => (order[a.kind] ?? 0) - (order[b.kind] ?? 0));
 }
 
+/* ── Terrain ──────────────────────────────────────────────────────
+   Height above the town's level (the DEM's median inside the town),
+   from a surface model: it carries tree canopies and roofs as bumps of
+   a few metres, so anything under 3 m is taken as level ground. The
+   town and the water are held level, and away from them the ground may
+   rise no faster than 1 in 3 — the banks come up gently, the hills
+   (Brauhausberg, Pfingstberg, Ruinenberg) keep their tops. */
+let terrain: City['terrain'];
+if (existsSync(`data/${id}/dem.json`)) {
+  const d = JSON.parse(readFileSync(`data/${id}/dem.json`, 'utf8')) as { x0: number; z0: number; step: number; nx: number; nz: number; h: number[] };
+  const { x0, z0, step, nx, nz } = d;
+  const townH: number[] = [];
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) if (inside(hist.town, x0 + i * step, z0 + j * step)) townH.push(d.h[j * nx + i]!);
+  townH.sort((a, b) => a - b);
+  const base = townH[townH.length >> 1] ?? 0;
+  const water = [...areas, ...region].filter((a) => a.kind === 'water');
+  const h = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const x = x0 + i * step, z = z0 + j * step;
+    let v = Math.max(0, d.h[j * nx + i]! - base - 3);
+    if (inside(hist.town, x, z) || water.some((a) => inside(a.outer, x, z) && !(a.holes ?? []).some((q) => inside(q, x, z)))) v = 0;
+    // and level inside the mapped bounds' margin too, where the plan is drawn in detail
+    if (x > bx0 - 40 && x < bx1 + 40 && z > bz0 - 40 && z < bz1 + 40 && v < 6) v = 0;
+    h[j * nx + i] = v;
+  }
+  // slope clamp, chamfer passes both ways
+  const s1 = step / 3, s2 = step * Math.SQRT2 / 3;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const k = j * nx + i;
+      if (i > 0) h[k] = Math.min(h[k]!, h[k - 1]! + s1);
+      if (j > 0) h[k] = Math.min(h[k]!, h[k - nx]! + s1);
+      if (i > 0 && j > 0) h[k] = Math.min(h[k]!, h[k - nx - 1]! + s2);
+      if (i < nx - 1 && j > 0) h[k] = Math.min(h[k]!, h[k - nx + 1]! + s2);
+    }
+    for (let j = nz - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) {
+      const k = j * nx + i;
+      if (i < nx - 1) h[k] = Math.min(h[k]!, h[k + 1]! + s1);
+      if (j < nz - 1) h[k] = Math.min(h[k]!, h[k + nx]! + s1);
+      if (i < nx - 1 && j < nz - 1) h[k] = Math.min(h[k]!, h[k + nx + 1]! + s2);
+      if (i > 0 && j < nz - 1) h[k] = Math.min(h[k]!, h[k + nx - 1]! + s2);
+    }
+  }
+  const dm = new Int16Array(nx * nz);
+  for (let k = 0; k < dm.length; k++) dm[k] = Math.round(h[k]! * 10);
+  terrain = { x0, z0, step, nx, nz, dm: Buffer.from(dm.buffer).toString('base64') };
+  console.log('terrain: base', base, 'm, max', h.reduce((a, b) => Math.max(a, b), 0).toFixed(1), 'm');
+}
+
 /* ── Clip to bounds and write ─────────────────────────────────── */
 const keepRing = (r: Ring) => { for (let i = 0; i < r.length; i += 2) if (inBounds([r[i]!, r[i + 1]!])) return true; return false; };
 const city: City = {
   id, name: hist.name, year: YEAR, origin: spec.origin,
   bounds: [round(bx0), round(bz0), round(bx1), round(bz1)],
   region, regionBounds,
+  ...(terrain ? { terrain } : {}),
   spawn: hist.spawn,
   buildings,
   areas: areas.filter((a) => keepRing(a.outer) || a.kind === 'water'),

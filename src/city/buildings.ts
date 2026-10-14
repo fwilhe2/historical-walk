@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { centroid } from '../geom/poly';
+import { heightAt } from './terrain';
 import { buildMassing, roofBuf, wallBuf, type RoofBuf, type WallBuf } from './massing';
 import type { Building } from './types';
 
@@ -275,7 +276,15 @@ export function buildBuildings(list: Building[]) {
     const key = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE);
     let t = tiles.get(key);
     if (!t) tiles.set(key, (t = { w: wallBuf(), r: roofBuf() }));
+    const w0 = t.w.pos.length, r0 = t.r.pos.length;
     try { buildMassing(b, t.w, t.r); } catch (e) { console.warn('building', b.id, e); }
+    // on a slope a building stands at its lowest corner, its uphill side in the ground
+    let gy = Infinity;
+    for (let i = 0; i < b.outer.length; i += 2) gy = Math.min(gy, heightAt(b.outer[i]!, b.outer[i + 1]!));
+    if (gy > 0.01) {
+      for (let i = w0 + 1; i < t.w.pos.length; i += 3) t.w.pos[i]! += gy;
+      for (let i = r0 + 1; i < t.r.pos.length; i += 3) t.r.pos[i]! += gy;
+    }
   }
   for (const t of tiles.values()) {
     if (t.w.pos.length) {

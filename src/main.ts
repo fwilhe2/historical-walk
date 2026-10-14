@@ -5,6 +5,7 @@ import { buildGround } from './city/ground';
 import { buildColumns, buildLamps, buildRails, buildTrees, buildWalls, buildWoods, lampGlow } from './city/props';
 import { buildWater, waterTime } from './city/water';
 import { buildTraffic } from './city/traffic';
+import { setTerrain } from './city/terrain';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
@@ -23,6 +24,7 @@ const LAT = city.origin[0];
 bootN.textContent = `${city.buildings.length} buildings, ${city.streets.length} streets`;
 await new Promise((r) => setTimeout(r, 0));
 
+setTerrain(city.terrain);
 const ground = buildGround(city);
 scene.add(ground.mesh);
 scene.add(buildWater(city, ground));

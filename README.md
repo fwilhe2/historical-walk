@@ -69,7 +69,12 @@ Beyond the mapped box the Havel's lakes, the woods and the royal
 gardens (Sanssouci, Babelsberg, the Neuer Garten, Glienicke, Sacrow)
 are drawn coarsely from today's OSM (`bun run fetch potsdam region`):
 water cut into the ground, woods as canopy volumes. Today's woods
-stand for the woods of 1900; parks are kept only by name.
+stand for the woods of 1900; parks are kept only by name. The ground
+follows a 20 m elevation grid (Terrarium tiles, `bun run fetch potsdam
+dem`) relative to the town's level, held level in the town and at the
+water and rising no steeper than 1 in 3 — the Brauhausberg across the
+Havel, the Pfingstberg and the Ruinenberg; bumps under 3 m (the model
+is a surface model, with tree tops and roofs) are taken as level.
 
 ### Hand-made knowledge
 
@@ -109,7 +114,8 @@ city never needs the network. To add a city: a `CitySpec` in
 ## Credits
 
 Map data © OpenStreetMap contributors (ODbL). Historical map data:
-OpenHistoricalMap contributors (CC0). Messtischblatt 3544/3644 (1903):
+OpenHistoricalMap contributors (CC0). Elevation: Terrarium tiles, AWS
+Open Data Registry (Mapzen; SRTM, EU-DEM and others). Messtischblatt 3544/3644 (1903):
 © Staatsbibliothek zu Berlin – Preußischer Kulturbesitz, dl-de/by-2-0,
 via Landesvermessung und Geobasisinformation Brandenburg (data changed:
 read as a built-up mask, shown sepia).

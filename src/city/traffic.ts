@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { heightAt } from './terrain';
 import type { City } from './types';
 
 /* ── The horse tram ─────────────────────────────────────────────
@@ -121,7 +122,7 @@ export function buildTraffic(city: City) {
       const [x, z, h] = at(c.route, c.s);
       // look a little ahead for the heading, so turns are smooth
       const [ax, az] = at(c.route, c.s + c.dir * 3);
-      c.obj.position.set(x, 0, z);
+      c.obj.position.set(x, heightAt(x, z), z);
       c.obj.rotation.y = Math.atan2(ax - x, az - z) || (c.dir === 1 ? h : h + Math.PI);
       const moving = c.wait <= 0 ? 1 : 0;
       c.legs.forEach((l, i) => { l.rotation.x = moving * 0.45 * Math.sin(c.phase + (i === 0 || i === 3 ? 0 : Math.PI)); });
