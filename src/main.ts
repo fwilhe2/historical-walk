@@ -8,7 +8,7 @@ import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
 import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
-import { SUN_DIR, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
+import { SUN_DIR, cloudTime, clouds, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
 import { hud, note } from './ui/hud';
 import { historicMap } from './ui/map';
 import { sound } from './audio/sound';
@@ -183,6 +183,8 @@ renderer.setAnimationLoop(() => {
   updateEnv();
   placeShadow(walker.x, 0, walker.z);
   waterTime.value += dt;
+  cloudTime.value += dt;
+  clouds.position.x = walker.x; clouds.position.z = walker.z;
   hud.update(dt, walker, sunState.hour, ground);
   historicMap.draw(walker.x, walker.z, walker.yaw);
   if ((hashT += dt) > 1 && !probe) {

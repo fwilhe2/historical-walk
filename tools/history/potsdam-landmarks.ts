@@ -165,4 +165,19 @@ export const LANDMARKS: Landmark[] = [
       P.box(0, 0, 3.2, 1.6, 7.5, 9.6, { ...s, colour: '#cbbf9f' });
     },
   },
+  {
+    /* The Obelisk on the Alter Markt, Knobelsdorff 1753–55: almost
+       20 m in all (potsdam.de), a 16 m shaft (potsdam-wiki) on a
+       stepped base with medallions of the four rulers. Shaft width
+       estimated. */
+    id: 'obelisk', name: 'Obelisk', year: 1755, at: [46, -62], front: 0,
+    about: 'Knobelsdorff\'s obelisk of 1753–55, almost 20 m high, its base carrying medallions of the Great Elector and the first three kings.',
+    build(P) {
+      const s = { colour: '#e4d9c6', wall: 'stone' as const, windows: false as const };
+      P.box(0, 0, 5.2, 5.2, 0, 0.8, s);
+      P.box(0, 0, 3.6, 3.6, 0.8, 3.6, s);
+      P.box(0, 0, 2.2, 2.2, 3.6, 17.2, { ...s, colour: '#d8cdb8' });
+      P.box(0, 0, 2.3, 2.3, 17.2, 17.3, { ...s, roof: 'pyramidal', roofH: 2.4, roofColour: '#d8cdb8' });
+    },
+  },
 ];

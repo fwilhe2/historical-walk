@@ -53,6 +53,48 @@ export const stars = (() => {
   return p;
 })();
 
+/* Clouds: fair-weather cumulus on a plane at 1.2 km that follows
+   the eye, drawn from fbm noise drifting with the wind, lit by the
+   sun's colour on top and greyer underneath, thinning toward the
+   horizon where the haze takes over. */
+export const cloudTime = { value: 0 };
+export const clouds = (() => {
+  const g = new THREE.PlaneGeometry(16000, 16000, 1, 1).rotateX(Math.PI / 2);
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    uniforms: { uT: cloudTime, uSun: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Color() }, uDay: { value: 1 }, uCover: { value: 0.5 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vW;
+      void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: /* glsl */ `
+      uniform float uT, uDay, uCover; uniform vec3 uSun, uSunCol;
+      varying vec3 vW;
+      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
+      void main() {
+        vec2 p = vW.xz / 900.0 + vec2(uT * 0.004, uT * 0.0015);
+        float d = fbm(p);
+        float c = smoothstep(1.0 - uCover, 1.0 - uCover + 0.28, d);
+        // a lit top and a grey belly: compare with a sample toward the sun
+        float d2 = fbm(p + uSun.xz * 0.06);
+        float lit = clamp(0.55 + (d - d2) * 3.0, 0.25, 1.0);
+        vec3 col = mix(vec3(0.55, 0.58, 0.64), uSunCol, lit) * (0.15 + 0.85 * uDay);
+        float dist = length(vW.xz - cameraPosition.xz);
+        float fade = 1.0 - smoothstep(2500.0, 7000.0, dist);
+        gl_FragColor = vec4(col, c * fade * 0.92);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.y = 1200;
+  mesh.renderOrder = -1;
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
+})();
+
 export const SUN_DIR = new THREE.Vector3();
 export const sunState = { hour: 17.5, day: 172 };   // day of year (21 June)
 
@@ -85,6 +127,10 @@ export function updateSun(lat: number) {
   // hemisphere only adds the warm bounce off sunlit streets and walls.
   hemi.intensity = 0.05 + 0.3 * day * Math.min(1, e * 3);
   (stars.material as THREE.PointsMaterial).opacity = THREE.MathUtils.smoothstep(-alt, 0.06, 0.2);
+  const cu = (clouds.material as THREE.ShaderMaterial).uniforms;
+  cu.uSun!.value.copy(SUN_DIR);
+  (cu.uSunCol!.value as THREE.Color).copy(sun.color).lerp(new THREE.Color(1, 1, 1), 0.4);
+  cu.uDay!.value = day;
   const fog = scene.fog as THREE.FogExp2;
   fog.color.setRGB(0.78, 0.82, 0.86).lerp(new THREE.Color(0.95, 0.72, 0.55), Math.max(0, 1 - e * 4) * day * 0.5).multiplyScalar(0.03 + 0.97 * day);
   return alt;
