@@ -211,6 +211,25 @@ for (const lm of hist.landmarks) {
   columns.push(...P.columns);
 }
 
+/* ── Colonnades ───────────────────────────────────────────────────
+   OHM maps colonnades (building=roof) as thin strips — the
+   Ringerkolonnade and the Havelkolonnade of 1745–46 are 1.3 m wide.
+   Each becomes a row of columns along its axis, 2.6 m apart, under an
+   entablature: open to walk through, as they were. Heights estimated. */
+for (let i = buildings.length - 1; i >= 0; i--) {
+  const b = buildings[i]!;
+  if (b.kind !== 'colonnade') continue;
+  const o = obb(b.outer);
+  const c = Math.cos(o.ang), sn = Math.sin(o.ang);
+  const n = Math.max(2, Math.round((2 * o.a) / 2.6) + 1);
+  const H = 6.2;
+  for (let k = 0; k < n; k++) {
+    const u = -o.a + 0.5 + (2 * o.a - 1) * k / (n - 1);
+    columns.push({ x: round(o.cx + u * c), z: round(o.cz + u * sn), r: 0.32, h: H, base: 0 });
+  }
+  buildings[i] = { ...b, base: H, eave: H + 1.3, roof: 'flat', roofH: 0, windows: false, wall: 'stone', colour: '#e2d6bf' };
+}
+
 /* ── Areas ────────────────────────────────────────────────────── */
 function areaKind(t: Tags): AreaKind | undefined {
   if (t.natural === 'water' || t.waterway === 'riverbank' || t.landuse === 'basin' || t.landuse === 'reservoir') return 'water';
