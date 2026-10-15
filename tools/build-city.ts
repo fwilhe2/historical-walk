@@ -183,6 +183,7 @@ for (const f of osm.feats) {
   if (y === undefined) {
     if (covers(ohmLater, cx, cz)) { stats.osmDroppedLater++; continue; }
     if (hist.lost.some((z) => inside(z.ring, cx, cz))) { stats.osmDroppedLost++; continue; }
+    if (t['addr:street'] && hist.newStreets.includes(t['addr:street'])) { stats.osmDroppedLater++; continue; }
     // Undated: kept where the historical map has the ground built up,
     // and when it does not look like a building of after 1900 (five
     // storeys and up, or a flat roof over three) — the slabs of the

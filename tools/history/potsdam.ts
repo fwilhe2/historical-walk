@@ -26,6 +26,10 @@ export const POTSDAM: History = {
     700, -250, 700, -185, 560, -140, 400, -105, 300, -75, 250, -50, 190, -5, 120, 65, 40, 120, -150, 280, -500, 240, -813, 126, -794, 42, -837, -33, -830, -95, -830, -415,
   ],
   landmarks: LANDMARKS,
+  // Laid out on the old town's rebuilt blocks by the Alter Markt and
+  // the canal (2016–) and on the Plantage beside the Garnisonkirche's
+  // site; named after people of the 20th century.
+  newStreets: ['Anna-Zielenziger-Straße', 'Anna-Flügge-Straße', 'Werner-Seelenbinder-Straße', 'Neue Plantage'],
   // the busy middle: the old town and the baroque extension
   centre: [-200, -350, 650],
   // the Garnisonkirche's carillon tower struck the hours; St. Nikolai the quarters

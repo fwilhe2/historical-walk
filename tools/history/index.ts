@@ -27,6 +27,9 @@ export interface History {
   lost: { name: string; ring: number[] }[];
   about: Record<string, string>;
   regionParks: string[];
+  // Streets laid out after the year: an undated building addressed on
+  // one is a building of that later time.
+  newStreets: string[];
   centre: [number, number, number];
   bells: { hours?: string; quarters?: string };
   mapCaption?: string;
