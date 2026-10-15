@@ -20,8 +20,11 @@ export const LANDMARKS: Landmark[] = [
       const F = P.F, f = F.front - 7;
       P.footprint(ring, 0, 15, { colour: PLASTER, roof: 'hipped', roofH: 15, roofColour: SLATE, kind: 'church', storey: 7.5 });
       P.box(0, f, 14, 14, 0, 34, { colour: SANDSTONE, kind: 'church', storey: 8.5, wall: 'stone' });
+      P.balustrade(0, f, 14.4, 34, { colour: SANDSTONE, wall: 'stone' });
       P.box(0, f, 12, 12, 34, 49, { colour: SANDSTONE, kind: 'church', storey: 7.5, wall: 'stone' });
+      P.balustrade(0, f, 12.4, 49, { colour: SANDSTONE, wall: 'stone' });
       P.box(0, f, 10.4, 10.4, 49, 60, { colour: SANDSTONE, kind: 'church', storey: 5.5, wall: 'stone' });
+      P.balustrade(0, f, 10.8, 60, { colour: SANDSTONE, wall: 'stone' }, 0.9);
       P.box(0, f, 8, 8, 60, 69, { colour: COPPER, wall: 'copper', windows: false });
       P.box(0, f, 5.6, 5.6, 69, 76, { colour: COPPER, wall: 'copper', windows: false });
       P.ngon(0, f, 2.6, 8, 76, 76.3, { colour: COPPER, wall: 'copper', windows: false, roof: 'spire', roofH: 12.1, roofColour: COPPER });
@@ -103,6 +106,7 @@ export const LANDMARKS: Landmark[] = [
       const f = P.F.front - 6.2;
       P.footprint(ring, 0, 15, { colour: PLASTER, kind: 'church', roof: 'hipped', roofH: 8, roofColour: COPPER, storey: 7.5 });
       P.box(0, f, 12.4, 12.4, 0, 42, { colour: PLASTER, kind: 'church', storey: 8.5 });
+      P.balustrade(0, f, 12.8, 42, { colour: PLASTER });
       P.box(0, f, 9.6, 9.6, 42, 55, { colour: COPPER, wall: 'copper', windows: false });
       P.box(0, f, 7.2, 7.2, 55, 65, { colour: COPPER, wall: 'copper', windows: false });
       P.ngon(0, f, 3.4, 8, 65, 72, { colour: COPPER, wall: 'copper', windows: false });

@@ -134,6 +134,13 @@ if (probe) {
       hud.refresh();
       await this.frames(3);
     },
+    landmark(text: string) {
+      const v = hud.viewpointOf(text);
+      if (!v) return false;
+      walker.x = v.x; walker.z = v.z; walker.yaw = v.yaw; walker.pitch = 0.35; walker.fly = false;
+      hud.refresh();
+      return true;
+    },
     state() {
       return JSON.stringify({ boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
     },

@@ -8,6 +8,7 @@
    Any key or click hands the walk back. Pure apart from the walker
    object it steers. */
 import type { City, Label } from '../city/types';
+import { viewpoint } from './viewpoint';
 
 interface Graph { x: Float64Array; z: Float64Array; adj: number[][]; main: Uint8Array }
 
@@ -122,13 +123,10 @@ export function makeTour(city: City) {
     const pool = left.length ? left : stops;
     pool.sort((a, b) => Math.hypot(a.x - w.x, a.z - w.z) - Math.hypot(b.x - w.x, b.z - w.z));
     for (const l of pool) {
-      // the graph node nearest the landmark but outside its own reach
-      let best = -1, bd = Infinity;
-      for (let i = 0; i < g.x.length; i++) {
-        const d = Math.hypot(g.x[i]! - l.x, g.z[i]! - l.z);
-        if (d > (l.r ?? 15) + 12 && d < bd && g.main[i]) { bd = d; best = i; }
-      }
-      if (best < 0) continue;
+      // walk to where it is best seen from (app/viewpoint.ts)
+      const v = viewpoint(city, l);
+      if (!v) continue;
+      const best = nearestNode(g, v.x, v.z);
       const p = shortestPath(g, nearestNode(g, w.x, w.z), best);
       seen.add(l.text);
       if (!p) continue;

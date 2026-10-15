@@ -1,6 +1,7 @@
 /* Screenshots of views, for checking changes by eye.
 
-     node tools/shot.ts OUT_DIR 'name=#x=…&z=…&yaw=…[|KeyM,KeyH]' [more…] [--size=1280x720]
+     node tools/shot.ts OUT_DIR 'name=#x=…&z=…&yaw=…[|KeyM,KeyH[@seconds]]' [more…] [--size=1280x720]
+     node tools/shot.ts OUT_DIR 'name=@Garnisonkirche'      (a landmark's street viewpoint)
 
    Starts a Vite dev server, opens the page in headless Firefox with
    ?probe (no overlay, no pointer lock), and for each view sets the
@@ -32,7 +33,7 @@ try {
   const page = await browser.newPage();
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warn') log('console ' + m.type() + ': ' + m.text().slice(0, 400)); });
   page.on('pageerror', (e) => log('pageerror: ' + (e as Error).message));
-  await page.goto(url + '?probe' + (views[0]?.[1] ?? ''));
+  await page.goto(url + '?probe' + (views[0]?.[1].startsWith('#') ? views[0][1].split('|')[0] : ''));
   await page.waitForFunction(() => !!window.hw, { timeout: 180000 });
   log('ready');
   for (const [name, spec] of views) {
@@ -40,7 +41,9 @@ try {
     const [hash, keySpec] = spec.split('|') as [string, string?];
     // "KeyT@8": press, then let 8 s pass before the shot
     const [keyList, waitS] = (keySpec ?? '').split('@') as [string, string?];
-    await page.evaluate((h) => window.hw!.go(h), hash);
+    // "@Name" stands at a landmark's street viewpoint, as G does
+    if (hash.startsWith('@')) await page.evaluate((n) => window.hw!.landmark(n), hash.slice(1));
+    else await page.evaluate((h) => window.hw!.go(h), hash);
     for (const k of keyList ? keyList.split(',') : []) await page.keyboard.press(k as never);
     if (waitS) await new Promise((ok) => setTimeout(ok, +waitS * 1000));
     await page.evaluate(() => window.hw!.frames(4));

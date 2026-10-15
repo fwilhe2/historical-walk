@@ -773,7 +773,15 @@ for (const b of buildings) {
   if (!b.name || (b.src !== 'ohm' && b.src !== 'model' && !hist.about[b.name])) continue;
   const [x, z] = centroid(b.outer);
   const o = obb(b.outer);
-  const l: Label = { x: round(x), z: round(z), text: b.name, kind: 'landmark', r: round(Math.hypot(o.a, o.b)) };
+  // its height: the tallest part of the same landmark (or the building)
+  const prefix = b.id.startsWith('lm:') ? b.id.slice(0, b.id.lastIndexOf(':') + 1) : null;
+  const parts = buildings.filter((p) => p === b || (prefix && p.id.startsWith(prefix)));
+  const tallest = parts.reduce((m, p) => (p.eave + p.roofH > m.eave + m.roofH ? p : m), b);
+  const h = tallest.eave + tallest.roofH;
+  // a landmark whose tower rises well over its body is placed (and aimed
+  // at, by the viewpoints) at the tower
+  const [lx, lz] = h > 1.5 * (b.eave + b.roofH) ? centroid(tallest.outer) : [x, z];
+  const l: Label = { x: round(lx), z: round(lz), text: b.name, kind: 'landmark', r: round(Math.hypot(o.a, o.b)), h: round(h) };
   const about = abouts.get(b.name) ?? hist.about[b.name];
   if (about) l.about = about;
   labels.push(l);
@@ -862,6 +870,15 @@ if (existsSync(`data/${id}/dem.json`)) {
   for (let k = 0; k < dm.length; k++) dm[k] = Math.round(h[k]! * 10);
   terrain = { x0, z0, step, nx, nz, dm: Buffer.from(dm.buffer).toString('base64') };
   console.log('terrain: base', base, 'm, max', h.reduce((a, b) => Math.max(a, b), 0).toFixed(1), 'm');
+}
+
+// one label per name: a landmark built onto a mapped building that
+// keeps its own name gives two; keep the one at the taller part
+{
+  const byText = new Map<string, Label>();
+  for (const l of labels) { const o = byText.get(l.text); if (!o || (l.h ?? 0) > (o.h ?? 0)) byText.set(l.text, o && !l.about ? { ...l, about: o.about } : l); }
+  labels.length = 0;
+  labels.push(...byText.values());
 }
 
 /* ── Clip to bounds and write ─────────────────────────────────── */

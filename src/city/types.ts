@@ -62,7 +62,7 @@ export interface Column { x: number; z: number; r: number; h: number; base: numb
 export interface Lamp { x: number; z: number }
 // Street furniture: an advertising column or a cast-iron pump.
 export interface Fixture { x: number; z: number; kind: 'column' | 'pump' }
-export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square'; about?: string; r?: number }
+export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square'; about?: string; r?: number; h?: number }
 
 export interface City {
   id: string;

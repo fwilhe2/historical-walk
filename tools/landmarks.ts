@@ -114,6 +114,18 @@ export class Parts {
       this.box(u + a, f, w / n + 0.02, d, y, top, s);
     }
   }
+  /* A balustrade round a square stage of side w at height y, and an
+     urn on each corner. */
+  balustrade(u: number, f: number, w: number, y: number, s: PartStyle, h = 1.1) {
+    const t = 0.35, st = { ...s, windows: false as const };
+    this.box(u, f + w / 2 - t / 2, w, t, y, y + h, st);
+    this.box(u, f - w / 2 + t / 2, w, t, y, y + h, st);
+    this.box(u + w / 2 - t / 2, f, t, w - 2 * t, y, y + h, st);
+    this.box(u - w / 2 + t / 2, f, t, w - 2 * t, y, y + h, st);
+    for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+      this.ngon(u + a * (w / 2 - 0.3), f + b * (w / 2 - 0.3), 0.32, 8, y + h, y + h + 1.2, { ...st, roof: 'dome', roofH: 0.35, roofColour: s.colour });
+    }
+  }
   /* The mapped footprint itself, as one part. */
   footprint(ring: Ring, base: number, top: number, s: PartStyle) {
     const b = this.push(orientPos(ring), base, top, s);
