@@ -219,6 +219,7 @@ for (const lm of hist.landmarks) {
     for (let i = buildings.length - 1; i >= 0; i--) if (gone.has(buildings[i]!)) buildings.splice(i, 1);
   }
   const P = new Parts(lm.id, frame(ring, lm.front), lm.name, lm.year);
+  P.mapped = { outer: ring, holes: hits[0]!.holes ?? [] };
   lm.build(P, ring);
   if (lm.about) abouts.set(lm.name, lm.about);
   buildings.push(...P.list);

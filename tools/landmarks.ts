@@ -58,6 +58,8 @@ export class Parts {
   list: Building[] = [];
   columns: Column[] = [];
   private n = 0;
+  // the mapped footprint's courtyards, used when footprint() is given the mapped ring
+  mapped: { outer: Ring; holes: Ring[] } | null = null;
   readonly id: string; readonly F: Frame; readonly name: string; readonly year: number | undefined;
   constructor(id: string, F: Frame, name: string, year?: number) { this.id = id; this.F = F; this.name = name; this.year = year; }
   private push(outer: Ring, base: number, top: number, s: PartStyle) {
@@ -113,7 +115,11 @@ export class Parts {
     }
   }
   /* The mapped footprint itself, as one part. */
-  footprint(ring: Ring, base: number, top: number, s: PartStyle) { return this.push(orientPos(ring), base, top, s); }
+  footprint(ring: Ring, base: number, top: number, s: PartStyle) {
+    const b = this.push(orientPos(ring), base, top, s);
+    if (this.mapped && ring === this.mapped.outer && this.mapped.holes.length) b.holes = this.mapped.holes;
+    return b;
+  }
   column(u: number, f: number, r: number, h: number, base = 0) {
     const [x, z] = this.F.at(u, f);
     this.columns.push({ x: +x.toFixed(2), z: +z.toFixed(2), r, h, base });
