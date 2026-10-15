@@ -33,15 +33,17 @@ three r160, Bun), rebuilt small for a town instead of a planet.
   Garnisonkirche, St. Nikolai, the Heilig-Geist-Kirche, St. Peter und
   Paul, the Altes Rathaus, the Stadtschloss with the Fortunaportal, the
   Langer Stall's show front, the Obelisk, the Brandenburger, Nauener and
-  Jäger gates, the Dampfmaschinenhaus. Baroque facades get pilasters,
+  Jäger gates, the Dampfmaschinenhaus, the orphanage's Monopteros.
+  Baroque facades get pilasters,
   the Dutch Quarter its bell gables in red brick, the shopping streets
   their shopfronts, the houses dormers and chimneys.
 - **The Stadtkanal** open again, with railings and bridges; the Havel
   with quays and bridge parapets; the excise wall that still closed the
   town; the Ringer- and Havelkolonnade.
-- **The horse tram** on its three lines of 1900, **people** on the
-  pavements — townsfolk and soldiers of the garrison — and gas lanterns
-  that light at dusk.
+- **The horse tram** on its three lines of 1900, horse cabs, barges and
+  a paddle steamer on the Havel, **people** on the pavements — townsfolk
+  and soldiers of the garrison — gas lanterns that light at dusk,
+  advertising columns and pumps at the crossings.
 - **The land round the town**: the Havel lakes, woods and the royal
   gardens, and the hills (the Brauhausberg across the river).
 - **Time** runs at the clock's pace; the sun follows Potsdam's latitude,
