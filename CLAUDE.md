@@ -20,7 +20,7 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 
 `bun run test`, not `bun test` (Vitest on Node). Tools run directly under Node's type stripping: imports with `.ts` extensions, no parameter properties or enums (`erasableSyntaxOnly` in `tools/tsconfig.json` checks this).
 
-**Verify visual changes with `tools/shot.ts`**: it starts Vite, opens the page in headless Firefox with `?probe`, sets each view through `window.hw.go(hash)` and saves PNGs; `|KeyM` after a hash presses keys first (and again after, to undo toggles). Read the PNGs. The view hash is `x`, `z` (metres, local frame), `yaw` (degrees, 0 north, 90 west), `pitch`, `t` (hour), `y` (eye height — means flying). For checking data, rasterise it over the historical map with a small PIL script (data/potsdam/mtb1903.png covers `city.bounds` exactly, pixel-linear).
+**Verify visual changes with `tools/shot.ts`**: it starts Vite, opens the page in headless Firefox with `?probe`, sets each view through `window.hw.go(hash)` and saves PNGs; `|KeyM` after a hash presses keys first (and again after, to undo toggles). Read the PNGs. The view hash is `x`, `z` (metres, local frame), `yaw` (degrees, 0 north, 90 west), `pitch`, `t` (local solar hour; the HUD shows the clock, Central European Time since 1893), `y` (eye height — means flying). For checking data, rasterise it over the historical map with a small PIL script (data/potsdam/mtb1903.png covers `city.bounds` exactly, pixel-linear).
 
 ## Layout
 

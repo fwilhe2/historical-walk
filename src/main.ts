@@ -222,7 +222,7 @@ renderer.setAnimationLoop(() => {
   people.step(probe ? 0 : dt, walker.x, walker.z, nightLight.value);
   cloudTime.value += dt;
   clouds.position.x = walker.x; clouds.position.z = walker.z;
-  hud.update(dt, walker, sunState.hour, ground);
+  hud.update(dt, walker, sunState.hour, ground, sunState.day);
   historicMap.draw(walker.x, walker.z, walker.yaw);
   if ((hashT += dt) > 1 && !probe) {
     hashT = 0;

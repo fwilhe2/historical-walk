@@ -71,7 +71,7 @@ export const hud = {
     if (!best) return null;
     return { text: l.text, x: best[0], z: best[1], yaw: Math.atan2(-(l.x - best[0]), -(l.z - best[1])) };
   },
-  update(dt: number, w: { x: number; z: number; yaw: number }, hour: number, ground: Ground) {
+  update(dt: number, w: { x: number; z: number; yaw: number }, hour: number, ground: Ground, day = 172) {
     if (noteT > 0 && (noteT -= dt) <= 0) $('note').textContent = '';
     fpsN++; fpsT += dt;
     if (fpsT > 0.5) { $('h-fps').textContent = `${(fpsN / fpsT).toFixed(0)} fps · ${w.x.toFixed(0)} E ${(-w.z).toFixed(0)} N`; fpsN = 0; fpsT = 0; }
@@ -91,8 +91,14 @@ export const hud = {
     }
     $('h-about').textContent = about;
     $('h-bld').textContent = b ? (b.year ? `${b.year}` : 'before 1900') + ' · ' + srcName(b.src) : '—';
-    const h = Math.floor(hour), m = Math.round((hour - h) * 60);
-    $('h-time').textContent = `${String(h).padStart(2, '0')}:${String(m === 60 ? 0 : m).padStart(2, '0')}`;
+    // The sun runs on local solar time; the town's clocks, since 1893,
+    // on Central European Time (15° E): add the longitude's offset and
+    // the equation of time (for the day of the year, to a minute).
+    const B = 2 * Math.PI * (day - 81) / 364;
+    const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);   // minutes, sundial ahead of the clock
+    const clock = (hour + (15 - city.origin[1]) / 15 - eot / 60 + 24) % 24;
+    const h = Math.floor(clock), m = Math.floor((clock - h) * 60);
+    $('h-time').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     const deg = ((-w.yaw * 180 / Math.PI) % 360 + 360) % 360;
     const dirs = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
     $('h-hdg').textContent = `${deg.toFixed(0).padStart(3, '0')}° ${dirs[Math.round(deg / 45) % 8]}`;
