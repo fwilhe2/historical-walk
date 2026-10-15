@@ -331,3 +331,58 @@ export function buildWoods(city: City) {
   mesh.name = 'woods';
   return mesh;
 }
+
+/* Street furniture: advertising columns, their drum pasted with bills
+   (a canvas of coloured sheets and lines of type), under a fluted cap
+   and finial; and cast-iron pumps, dark green, with a lion's-head
+   spout and a handle. */
+function billTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const g = c.getContext('2d')!;
+  let seed = 3;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = '#d9cfb4'; g.fillRect(0, 0, 512, 256);
+  const papers = ['#e8dcb8', '#f2e6c8', '#c9a86a', '#d27b54', '#7c9bb5', '#e3c56a', '#b8c2a0', '#efe9dc'];
+  for (let i = 0; i < 26; i++) {
+    const w = 50 + rnd() * 90, h = 40 + rnd() * 110, x = rnd() * 512 - 20, y = rnd() * 256 - 20;
+    g.fillStyle = papers[Math.floor(rnd() * papers.length)]!;
+    g.fillRect(x, y, w, h);
+    g.fillStyle = rnd() < 0.5 ? '#2a2420' : '#8a2a20';
+    for (let l = 0; l < 5; l++) {
+      const lw = w * (0.4 + rnd() * 0.5), lh = l === 0 ? 9 : 4;
+      g.fillRect(x + (w - lw) / 2, y + 10 + l * (h - 20) / 5, lw, lh);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+export function buildFixtures(city: City) {
+  const group = new THREE.Group();
+  group.name = 'fixtures';
+  const cols = city.fixtures.filter((f) => f.kind === 'column'), pumps = city.fixtures.filter((f) => f.kind === 'pump');
+  const m = new THREE.Matrix4();
+  const inst = (g: THREE.BufferGeometry, mat: THREE.Material, list: typeof cols) => {
+    const im = new THREE.InstancedMesh(g, mat, Math.max(1, list.length));
+    im.count = list.length;
+    list.forEach((f, i) => im.setMatrixAt(i, m.makeTranslation(f.x, heightAt(f.x, f.z), f.z)));
+    im.castShadow = true; im.receiveShadow = true;
+    group.add(im);
+  };
+  const green = new THREE.MeshStandardMaterial({ color: 0x2f4a36, roughness: 0.6, metalness: 0.3 });
+  const bills = new THREE.MeshStandardMaterial({ map: billTexture(), roughness: 0.9 });
+  inst(new THREE.CylinderGeometry(0.62, 0.62, 2.5, 20, 1, true).translate(0, 1.55, 0), bills, cols);
+  inst(new THREE.CylinderGeometry(0.7, 0.72, 0.3, 20).translate(0, 0.15, 0), green, cols);
+  inst(new THREE.CylinderGeometry(0.66, 0.66, 0.22, 20).translate(0, 2.9, 0), green, cols);
+  inst(new THREE.SphereGeometry(0.66, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 3.0, 0), green, cols);
+  inst(new THREE.ConeGeometry(0.08, 0.5, 8).translate(0, 3.85, 0), green, cols);
+  // the pump: a fluted post, a spout, a curved handle (a half torus)
+  inst(new THREE.CylinderGeometry(0.16, 0.22, 1.9, 10).translate(0, 0.95, 0), green, pumps);
+  inst(new THREE.ConeGeometry(0.2, 0.45, 10).translate(0, 2.1, 0), green, pumps);
+  inst(new THREE.CylinderGeometry(0.045, 0.045, 0.4, 6).rotateX(Math.PI / 2).translate(0, 1.1, 0.3), green, pumps);
+  inst(new THREE.TorusGeometry(0.4, 0.03, 6, 12, Math.PI).rotateY(Math.PI / 2).translate(0, 1.6, -0.35), green, pumps);
+  return group;
+}

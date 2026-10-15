@@ -26,6 +26,7 @@ export function buildSegs(city: City): Segs {
     for (const h of b.holes ?? []) ring(h, true);
   }
   for (const w of city.walls) ring(w.pts, false);
+  for (const f of city.fixtures) { const r = f.kind === 'column' ? 0.7 : 0.25; ring([f.x - r, f.z - r, f.x + r, f.z - r, f.x + r, f.z + r, f.x - r, f.z + r], true); }
   for (const l of city.lamps) ring([l.x - 0.15, l.z - 0.15, l.x + 0.15, l.z - 0.15, l.x + 0.15, l.z + 0.15, l.x - 0.15, l.z + 0.15], true);
   // columns as small squares
   for (const c of city.columns) {

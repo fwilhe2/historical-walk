@@ -60,6 +60,8 @@ export interface Tree { x: number; z: number; h: number; r: number }
 export interface Column { x: number; z: number; r: number; h: number; base: number }
 // A gas lantern on its post, on the pavement's kerb side.
 export interface Lamp { x: number; z: number }
+// Street furniture: an advertising column or a cast-iron pump.
+export interface Fixture { x: number; z: number; kind: 'column' | 'pump' }
 export interface Label { x: number; z: number; text: string; kind: 'landmark' | 'street' | 'square'; about?: string; r?: number }
 
 export interface City {
@@ -84,6 +86,7 @@ export interface City {
   trees: Tree[];
   columns: Column[];
   lamps: Lamp[];
+  fixtures: Fixture[];
   labels: Label[];
   water: number;                                    // the river's level, m (negative: below the streets)
   centre: [number, number, number];                 // x, z, radius of the busy middle of town

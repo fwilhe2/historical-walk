@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { CITIES } from './cities.ts';
 import { aliveIn, load, projector, year, type Feature, type Pt, type Tags } from './osm.ts';
 import { area, bbox, buffer, centroid, inside, inset, obb, orient, segDist2, simplify, straighten, type Ring } from '../src/geom/poly.ts';
-import type { Area, AreaKind, Building, City, Column, Label, Lamp, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
+import type { Area, AreaKind, Building, City, Column, Fixture, Label, Lamp, Rail, RoofShape, Street, StreetKind, Tree, Wall } from '../src/city/types.ts';
 import { HISTORY } from './history/index.ts';
 import { blockOutlines, loadMask, maskShare, type Mask } from './mask.ts';
 import { Parts, frame } from './landmarks.ts';
@@ -719,6 +719,50 @@ const lamps: Lamp[] = [];
   }
 }
 
+/* ── Street furniture ──────────────────────────────────────────────
+   At the crossings of the busy middle of town (points shared by three
+   or more street pieces), on a pavement corner clear of buildings and
+   lanterns: every third crossing an advertising column (Litfaßsäule,
+   in Prussian towns from the 1850s), every fifth a cast-iron pump. */
+const fixtures: Fixture[] = [];
+{
+  const count = new Map<string, { x: number; z: number; n: number; w: number }>();
+  for (const st of streets) {
+    if (st.kind !== 'main' && st.kind !== 'street') continue;
+    for (let i = 0; i < st.pts.length; i += 2) {
+      const k = Math.round(st.pts[i]!) + ',' + Math.round(st.pts[i + 1]!);
+      const c = count.get(k) ?? { x: st.pts[i]!, z: st.pts[i + 1]!, n: 0, w: 0 };
+      c.n += i === 0 || i === st.pts.length - 2 ? 1 : 2; c.w = Math.max(c.w, st.w);
+      count.set(k, c);
+    }
+  }
+  const [ccx, ccz, ccr] = hist.centre;
+  const blocked = (x: number, z: number) => buildings.some((b) => (b.base ?? 0) < 2 && inside(b.outer, x, z))
+    || lamps.some((l) => Math.hypot(l.x - x, l.z - z) < 3) || areas.some((a) => a.kind === 'water' && inside(a.outer, x, z));
+  let k = 0;
+  for (const c of [...count.values()].sort((a, b) => a.x - b.x || a.z - b.z)) {
+    if (c.n < 3 || Math.hypot(c.x - ccx, c.z - ccz) > ccr) continue;
+    k++;
+    const kind = k % 3 === 0 ? 'column' : k % 5 === 0 ? 'pump' : null;
+    if (!kind) continue;
+    // a corner of the crossing: on a pavement (within some street's
+    // width, outside every carriageway), clear of the rest
+    const near = streets.filter((st) => (st.kind === 'main' || st.kind === 'street') && nearLine(st.pts, c.x, c.z, 30));
+    const onPavement = (x: number, z: number) => near.some((st) => nearLine(st.pts, x, z, st.w / 2 - 0.5))
+      && !near.some((st) => nearLine(st.pts, x, z, Math.max(3, st.w - 2 * 2.6) / 2 + 0.6));
+    let placed = false;
+    for (let rr = c.w / 2 - 0.5; rr < c.w / 2 + 6 && !placed; rr += 1) {
+      for (let a = 0; a < 16 && !placed; a++) {
+        const x = c.x + Math.cos(a / 16 * Math.PI * 2 + 0.2) * rr, z = c.z + Math.sin(a / 16 * Math.PI * 2 + 0.2) * rr;
+        if (!onPavement(x, z) || blocked(x, z) || fixtures.some((f) => Math.hypot(f.x - x, f.z - z) < 40)) continue;
+        fixtures.push({ x: round(x), z: round(z), kind });
+        placed = true;
+      }
+    }
+  }
+  console.log('fixtures:', fixtures.length);
+}
+
 /* ── Labels ───────────────────────────────────────────────────── */
 const labels: Label[] = [];
 // Names of the year only: OHM's and the landmarks'. OSM's names are
@@ -832,7 +876,7 @@ const city: City = {
   streets: streets.filter((s) => keepRing(s.pts)),
   walls: walls.filter((w) => keepRing(w.pts)),
   rails: rails.filter((r) => keepRing(r.pts)),
-  trees, columns, lamps, labels,
+  trees, columns, lamps, fixtures, labels,
   water: hist.water,
   centre: hist.centre,
   bells: hist.bells,

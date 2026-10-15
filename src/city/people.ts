@@ -124,9 +124,9 @@ export function buildPeople(city: City) {
     const L = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / L, nz = (bx - ax) / L;
     return [ax + (bx - ax) * a + nx * p.off, az + (bz - az) * a + nz * p.off, Math.atan2(bx - ax, bz - az)];
   };
-  const place = (im: THREE.InstancedMesh, i: number, x: number, y: number, z: number, yaw: number, pitch = 0, s = 1) => {
+  const place = (im: THREE.InstancedMesh, i: number, x: number, y: number, z: number, yaw: number, pitch = 0, s = 1, sy = 1) => {
     e.set(pitch, yaw, 0, 'YXZ'); q.setFromEuler(e);
-    im.setMatrixAt(i, m.compose(t.set(x, y, z), q, sc.set(s, s, s)));
+    im.setMatrixAt(i, m.compose(t.set(x, y, z), q, sc.set(s, s * sy, s)));
   };
 
   const step = (dt: number, cx: number, cz: number, night = 0) => {
@@ -163,9 +163,10 @@ export function buildPeople(city: City) {
       place(head, i, x, top + 0.13 * H, z, yaw, 0, H);
       const hy = top + 0.21 * H;
       if (p.kind === 'soldier') {
-        place(hat, i, x, hy, z, yaw, 0, H * 1.05);
-        place(brim, i, x, hy, z, yaw, 0, H * 0.75);
-        place(spike, i, x, hy + 0.17 * H, z, yaw, 0, H);
+        // the Pickelhaube: a low rounded crown, a short peak, the spike
+        place(hat, i, x, hy - 0.03, z, yaw, 0, H * 1.15, 0.6);
+        place(brim, i, x, hy - 0.02, z, yaw, 0, H * 0.75);
+        place(spike, i, x, hy + 0.08 * H, z, yaw, 0, H);
       } else {
         place(hat, i, x, hy, z, yaw, 0, H * (p.kind === 'woman' ? 0.8 : 1));
         place(brim, i, x, hy + 0.005, z, yaw, 0, H * (p.kind === 'woman' ? 1.25 : 1));

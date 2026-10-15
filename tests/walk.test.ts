@@ -7,7 +7,7 @@ import type { City } from '../src/city/types';
 const city = (over: Partial<City> = {}): City => ({
   id: 't', name: 'T', year: 1900, origin: [0, 0], bounds: [-100, -100, 100, 100], region: [], regionBounds: [-100, -100, 100, 100], centre: [0, 0, 100], bells: {}, spawn: { x: 0, z: 0, yaw: 0 },
   buildings: [{ id: 'b', src: 'osm', outer: [0, 0, 10, 0, 10, 10, 0, 10], eave: 8, roofH: 0, roof: 'flat', storey: 3, colour: '#ffffff', roofColour: '#ffffff' }],
-  areas: [], streets: [], walls: [], rails: [], trees: [], columns: [], lamps: [], labels: [], water: -1.6, credits: [], ...over,
+  areas: [], streets: [], walls: [], rails: [], trees: [], columns: [], lamps: [], fixtures: [], labels: [], water: -1.6, credits: [], ...over,
 });
 
 describe('collision', () => {
