@@ -2,6 +2,8 @@
 
      node tools/shot.ts OUT_DIR 'name=#x=…&z=…&yaw=…[|KeyM,KeyH[@seconds]]' [more…] [--size=1280x720]
      node tools/shot.ts OUT_DIR 'name=@Garnisonkirche'      (a landmark's street viewpoint)
+     node tools/shot.ts OUT_DIR … --query=debug=ao          (more of the page's query: ?debug=ao shows the occlusion)
+     node tools/shot.ts OUT_DIR … --fps                     (and measure the frame rate over 20 frames after each shot)
 
    Starts a Vite dev server, opens the page in headless Firefox with
    ?probe (no overlay, no pointer lock), and for each view sets the
@@ -16,6 +18,8 @@ const args = process.argv.slice(2);
 const out = args.shift();
 if (!out) { console.error('usage: shot.ts OUT_DIR name=#hash …'); process.exit(2); }
 const size = (args.find((a) => a.startsWith('--size=')) ?? '--size=1280x720').slice(7).split('x').map(Number);
+const measure = args.includes('--fps');
+const query = args.filter((a) => a.startsWith('--query=')).map((a) => '&' + a.slice(8)).join('');
 const views = args.filter((a) => !a.startsWith('--')).map((a) => { const i = a.indexOf('='); return [a.slice(0, i), a.slice(i + 1)] as const; });
 fs.mkdirSync(out, { recursive: true });
 
@@ -33,7 +37,7 @@ try {
   const page = await browser.newPage();
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warn') log('console ' + m.type() + ': ' + m.text().slice(0, 400)); });
   page.on('pageerror', (e) => log('pageerror: ' + (e as Error).message));
-  await page.goto(url + '?probe' + (views[0]?.[1].startsWith('#') ? views[0][1].split('|')[0] : ''));
+  await page.goto(url + '?probe' + query + (views[0]?.[1].startsWith('#') ? views[0][1].split('|')[0] : ''));
   await page.waitForFunction(() => !!window.hw, { timeout: 180000 });
   log('ready');
   for (const [name, spec] of views) {
@@ -48,7 +52,13 @@ try {
     if (waitS) await new Promise((ok) => setTimeout(ok, +waitS * 1000));
     await page.evaluate(() => window.hw!.frames(4));
     await page.screenshot({ path: path.join(out, name + '.png') as `${string}.png` });
-    log('shot ' + name + ' ' + await page.evaluate(() => window.hw!.state()));
+    const fps = measure ? ' ' + (await page.evaluate(async () => {
+      await window.hw!.frames(1);
+      const t = performance.now();
+      await window.hw!.frames(20);
+      return 20000 / (performance.now() - t);
+    })).toFixed(1) + ' fps' : '';
+    log('shot ' + name + fps + ' ' + await page.evaluate(() => window.hw!.state()));
     // and release them again, so toggles do not carry into the next view
     for (const k of keyList ? keyList.split(',') : []) await page.keyboard.press(k as never);
   }

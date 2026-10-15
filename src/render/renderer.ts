@@ -3,14 +3,13 @@ import * as THREE from 'three';
 /* ═════════════════════════════════════════════════════════════
    RENDERER
    ═════════════════════════════════════════════════════════════ */
-export const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+// No antialiasing on the canvas: the scene renders into a multisampled
+// HDR target, and post.ts exposes, tone-maps and writes the screen.
+export const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// AgX: a gentle toe and film-like highlights, so a sunlit facade and
-// the street in its shadow both keep their detail.
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.75;
+renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 export const ANISO = renderer.capabilities.getMaxAnisotropy();

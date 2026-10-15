@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { renderer } from '../render/renderer';
+import { bakeGroundTextures } from './groundtex';
 import { heightAt } from './terrain';
 import type { City, Ring } from './types';
 
@@ -14,9 +16,16 @@ import type { City, Ring } from './types';
 
    Everything is painted opaque in order, so at any texel the weights
    sum to at most one. The ground starts as grass (gardens); the
-   historical map's built blocks are yards of earth on top. The ground shader turns each weight into its
-   surface, procedurally; where water wins it discards, and the river
+   historical map's built blocks are yards of earth on top. The ground
+   shader turns each weight into its surface from baked textures
+   (groundtex.ts); where water wins it discards, and the river
    (city/water.ts) shows through, 1.6 m down between quay walls.
+
+   A third raster, the street frame, is computed from the street lines
+   themselves: the signed distance to the nearest carriageway's edge
+   and that street's bearing. By it the shader sets the kerbstones,
+   the gutter, the pavement's band of slabs between strips of mosaic,
+   and lays the setts in rows across each street.
 
    The same pixels answer `groundAt()` for the walker, so where you
    can stand and what you see agree. */
@@ -90,6 +99,8 @@ export function buildGround(city: City): Ground {
   c.beginPath();
   for (const bd of city.buildings) if ((bd.base ?? 0) < 2) ring(c, bd.outer);
   c.fill('nonzero');
+  const tS = streetFrame(city, x0, z0, sx, sz);
+  const tex = bakeGroundTextures(renderer);
   const tA = new THREE.CanvasTexture(cA), tB = new THREE.CanvasTexture(cB), tC = new THREE.CanvasTexture(cC);
   for (const t of [tA, tB, tC]) {
     t.flipY = false; t.colorSpace = THREE.NoColorSpace;
@@ -132,7 +143,8 @@ export function buildGround(city: City): Ground {
   for (let i = 0; i < gp.count; i++) gp.setY(i, heightAt(gp.getX(i), gp.getZ(i)));
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
-  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR },
+  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR }, tS: { value: tS },
+    tGA: { value: tex.albedo }, tGN: { value: tex.normal }, uSRes: { value: new THREE.Vector2(RES, RES) },
     uB: { value: new THREE.Vector4(x0, z0, W, H) }, uR: { value: new THREE.Vector4(r0, q0, RW, RH) } };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
@@ -143,7 +155,9 @@ export function buildGround(city: City): Ground {
       .replace('#include <common>', '#include <common>\n' + GROUND_PARS)
       .replace('#include <map_fragment>', GROUND_MAP)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(normal + gBump);');
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(gNrm, 0.0)).xyz);')
+      // the relief's and the walls' occlusion dims the sky's light only, not the sun's
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= gAO;\nreflectedLight.indirectSpecular *= mix(1.0, gAO, 0.7);');
   };
   mat.customProgramCacheKey = () => 'ground';
   const mesh = new THREE.Mesh(geo, mat);
@@ -165,9 +179,51 @@ export function buildGround(city: City): Ground {
   };
 }
 
+/* The street frame: R the signed distance to the nearest carriageway's
+   edge (−4..4 m, negative on the carriageway), G that street's bearing
+   (0..π). Exact, from the street lines as capsules of the widths the
+   carriageways are painted at, unlike a distance taken from the raster. */
+function streetFrame(city: City, x0: number, z0: number, sx: number, sz: number) {
+  const D = new Float32Array(RES * RES).fill(4), TH = new Float32Array(RES * RES);
+  for (const s of city.streets) {
+    if (s.kind === 'path' || s.kind === 'footbridge') continue;
+    const r = (s.kind === 'lane' ? s.w : Math.max(3, s.w - 2 * SIDEWALK)) / 2, R = r + 4;
+    const p = s.pts;
+    for (let i = 2; i < p.length; i += 2) {
+      const ax = p[i - 2]!, az = p[i - 1]!, bx = p[i]!, bz = p[i + 1]!;
+      const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
+      if (L2 < 1e-6) continue;
+      const th = (Math.atan2(dz, dx) + Math.PI) % Math.PI;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - R - x0) * sx)), i1 = Math.min(RES - 1, Math.ceil((Math.max(ax, bx) + R - x0) * sx));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - R - z0) * sz)), j1 = Math.min(RES - 1, Math.ceil((Math.max(az, bz) + R - z0) * sz));
+      for (let j = j0; j <= j1; j++) {
+        const z = z0 + (j + 0.5) / sz;
+        for (let k = i0; k <= i1; k++) {
+          const x = x0 + (k + 0.5) / sx;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+          const d = Math.hypot(ax + t * dx - x, az + t * dz - z) - r;
+          const n = j * RES + k;
+          if (d < D[n]!) { D[n] = d; TH[n] = th; }
+        }
+      }
+    }
+  }
+  const data = new Uint8Array(RES * RES * 4);
+  for (let n = 0; n < RES * RES; n++) {
+    data[n * 4] = Math.round(Math.max(0, Math.min(1, (D[n]! + 4) / 8)) * 255);
+    data[n * 4 + 1] = Math.round(TH[n]! / Math.PI * 255) % 256;
+  }
+  const t = new THREE.DataTexture(data, RES, RES, THREE.RGBAFormat, THREE.UnsignedByteType);
+  t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
 const GROUND_PARS = /* glsl */ `
-uniform sampler2D tA, tB, tC, tR;
+uniform sampler2D tA, tB, tC, tR, tS;
+uniform highp sampler2DArray tGA, tGN;
 uniform vec4 uB, uR;
+uniform vec2 uSRes;
 varying vec3 vW;
 float gH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float gN(vec2 p) {
@@ -176,6 +232,21 @@ float gN(vec2 p) {
   return mix(mix(gH(i), gH(i + vec2(1, 0)), f.x), mix(gH(i + vec2(0, 1)), gH(i + vec2(1, 1)), f.x), f.y);
 }
 float gF(vec2 p) { return 0.5 * gN(p) + 0.25 * gN(p * 2.03) + 0.125 * gN(p * 4.1) + 0.0625 * gN(p * 8.3); }
+// accumulated surface: albedo + roughness, world normal + occlusion
+vec4 gAcc, gNAcc;
+float gAO = 1.0;
+vec3 gNrm = vec3(0.0, 1.0, 0.0);
+// one baked surface (layer L) at tile coordinates tc, whose x and y
+// axes run along the world directions ex and ey (level)
+void gAdd(float w, float L, vec2 tc, vec2 dx, vec2 dy, vec2 ex, vec2 ey) {
+  if (w < 0.002) return;
+  vec4 a = textureGrad(tGA, vec3(tc, L), dx, dy);
+  vec4 n = textureGrad(tGN, vec3(tc, L), dx, dy);
+  vec2 t = n.xy * 2.0 - 1.0;
+  vec3 nw = vec3(ex.x, 0.0, ex.y) * t.x + vec3(ey.x, 0.0, ey.y) * t.y + vec3(0.0, sqrt(max(0.0, 1.0 - dot(t, t))), 0.0);
+  gAcc += w * a;
+  gNAcc += w * vec4(nw, n.w);
+}
 `;
 
 const GROUND_MAP = /* glsl */ `
@@ -193,47 +264,99 @@ const GROUND_MAP = /* glsl */ `
     wood = smoothstep(0.3, 0.7, R.g);
   }
   if (B.r > 0.5) discard;
-  // sharpen: weights to near-binary with a soft edge a few cm wide
   vec3 sA = smoothstep(0.38, 0.62, A), sB = smoothstep(0.38, 0.62, B);
-  float dist = length(vW - cameraPosition);
-  float aa = clamp(dist * 0.004, 0.0, 1.0);
-
-  // granite setts in rows, joints dark, each stone its own grey
-  vec2 sp = p / vec2(0.15, 0.13);
-  float row = floor(sp.y);
-  sp.x += gH(vec2(row, 3.0)) * 7.0;
-  vec2 cell = floor(sp), f = fract(sp);
-  float joint = smoothstep(0.0, 0.12 + aa, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)) * 1.6);
-  float tone = gH(cell);
-  vec3 setts = mix(vec3(0.07, 0.068, 0.065), vec3(0.2, 0.185, 0.17), tone) * mix(0.55, 1.0, mix(joint, 0.82, aa));
-  setts *= 0.85 + 0.3 * gF(p * 0.35);
-  // large granite slabs with a mosaic strip beside them
-  vec2 lp = p / vec2(1.2, 0.9);
-  vec2 lf = fract(lp);
-  float lj = smoothstep(0.0, 0.03 + aa * 0.2, min(min(lf.x, 1.0 - lf.x), min(lf.y, 1.0 - lf.y)));
-  vec3 slabs = mix(vec3(0.17, 0.165, 0.155), vec3(0.24, 0.23, 0.215), gH(floor(lp))) * mix(0.7, 1.0, lj);
-  slabs *= 0.9 + 0.2 * gF(p * 1.7);
-  vec3 grass = mix(vec3(0.04, 0.07, 0.015), vec3(0.09, 0.13, 0.03), gF(p * 0.6)) * (0.85 + 0.3 * gN(p * 6.0));
-  vec3 gravel = mix(vec3(0.24, 0.21, 0.16), vec3(0.32, 0.28, 0.21), gF(p * 2.5)) * (0.9 + 0.15 * gH(floor(p * 18.0)));
-  vec3 earth = mix(vec3(0.12, 0.095, 0.065), vec3(0.19, 0.155, 0.11), gF(p * 0.8));
-  vec3 rail = mix(vec3(0.06, 0.055, 0.05), vec3(0.12, 0.105, 0.09), gH(floor(p * 12.0)));
-
   float wS = sA.r, wL = sA.g * (1.0 - wS), wG = sA.b, wR = sB.g, wV = sB.b;
   float wE = max(0.0, 1.0 - wS - wL - wG - wR - wV);
   float tot = wS + wL + wG + wR + wV + wE;
-  vec3 col = (setts * wS + slabs * wL + grass * wG + rail * wR + gravel * wV + earth * wE) / tot;
+  wS /= tot; wL /= tot; wG /= tot; wR /= tot; wV /= tot; wE /= tot;
+
+  // The street frame: how far to the kerb, which way the street runs.
+  float kd = 4.0, th = 0.0;
+  vec2 kg = vec2(0.0, 1.0);
+  if (inside) {
+    kd = texture2D(tS, tuv).r * 8.0 - 4.0;
+    vec2 e = 0.5 / uSRes;
+    kg = vec2(texture2D(tS, tuv + vec2(e.x, 0.0)).r - texture2D(tS, tuv - vec2(e.x, 0.0)).r,
+              texture2D(tS, tuv + vec2(0.0, e.y)).r - texture2D(tS, tuv - vec2(0.0, e.y)).r) / (2.0 * e * uB.zw);
+    kg = length(kg) > 1e-4 ? normalize(kg) : vec2(0.0, 1.0);
+    // the courses of two streets meet in a ragged seam, not the raster's steps
+    vec2 tw = tuv + (vec2(gN(p * 0.8), gN(p * 0.8 + 9.0)) - 0.5) * 2.0 / uB.zw;
+    th = texelFetch(tS, ivec2(clamp(tw * uSRes, vec2(0.0), uSRes - 1.0)), 0).g * 3.14159265;
+  }
+  vec2 al = vec2(cos(th), sin(th)), ac = vec2(-al.y, al.x);
+  vec2 q = vec2(dot(p, ac), dot(p, al));
+  vec2 pdx = dFdx(p), pdy = dFdy(p);
+  vec2 qdx = vec2(dot(pdx, ac), dot(pdx, al)), qdy = vec2(dot(pdy, ac), dot(pdy, al));
+  float kdx = dFdx(kd), kdy = dFdy(kd);
+  float kaa = clamp(length(vec2(kdx, kdy)), 0.004, 0.3);
+
+  // The pavement runs up to the houses: bare earth left between a
+  // street's pavement and the building line (the raster's pavement is
+  // a fixed 2.6 m) is paved with mosaic too. Grass stays (front gardens).
+  float upTo = wE * (1.0 - smoothstep(6.0, 7.5, kd)) * step(0.0, kd) * (inside ? 1.0 : 0.0);
+  wL += upTo; wE -= upTo;
+  // Paved ground: the raster says where, the frame says which side of
+  // the kerb (the raster's edge is a metre coarse).
+  float paved = wS + wL;
+  float road = paved * (1.0 - smoothstep(-kaa, kaa, kd));
+  float walk = paved - road;
+  // on the road: the kerb's face (seen from above, a strip), the gutter
+  // (setts laid along the kerb), and the setts in rows across
+  float face = road * smoothstep(-0.13 - kaa, -0.13 + kaa, kd);
+  float gut = road * smoothstep(-0.5 - kaa, -0.5 + kaa, kd) - face;
+  float setts = road - face - gut;
+  // on the pavement: kerbstones, mosaic, a band of slabs, mosaic again
+  float kerb = walk * (1.0 - smoothstep(0.3 - kaa, 0.3 + kaa, kd));
+  float band = walk * smoothstep(0.65 - kaa, 0.65 + kaa, kd) * (1.0 - smoothstep(1.95 - kaa, 1.95 + kaa, kd));
+  float mos = walk - kerb - band;
+
+  gAcc = vec4(0.0); gNAcc = vec4(0.0);
+  gAdd(setts, 0.0, q / 2.4, qdx / 2.4, qdy / 2.4, ac, al);
+  vec2 g2 = vec2(q.y, -kd) / 2.4;
+  gAdd(gut, 0.0, g2, vec2(qdx.y, -kdx) / 2.4, vec2(qdy.y, -kdy) / 2.4, al, -kg);
+  vec2 k2 = vec2(kd / 0.3, q.y / 4.0);
+  gAdd(kerb + face, 1.0, k2, vec2(kdx / 0.3, qdx.y / 4.0), vec2(kdy / 0.3, qdy.y / 4.0), kg, al);
+  vec2 b2 = vec2((kd - 0.65) / 1.3, q.y / 4.8);
+  gAdd(band, 1.0, b2, vec2(kdx / 1.3, qdx.y / 4.8), vec2(kdy / 1.3, qdy.y / 4.8), kg, al);
+  gAdd(mos, 2.0, q / 1.2, qdx / 1.2, qdy / 1.2, ac, al);
+  gAdd(wV + wR, 3.0, p / 2.0, pdx / 2.0, pdy / 2.0, vec2(1.0, 0.0), vec2(0.0, 1.0));
+  gAdd(wG, 4.0, p / 2.0, pdx / 2.0, pdy / 2.0, vec2(1.0, 0.0), vec2(0.0, 1.0));
+  gAdd(wE, 5.0, p / 3.0, pdx / 3.0, pdy / 3.0, vec2(1.0, 0.0), vec2(0.0, 1.0));
+  float wsum = max(setts + gut + kerb + face + band + mos + wV + wR + wG + wE, 1e-3);
+  vec3 col = gAcc.rgb / wsum;
+  float gRough = gAcc.a / wsum;
+  vec3 nW = gNAcc.xyz / wsum;
+  float ao = gNAcc.w / wsum;
+
+  // the kerb's face: dressed granite turned toward the road
+  if (face > 0.01) {
+    nW = normalize(mix(nW, vec3(-kg.x, 0.3, -kg.y), face));
+    col *= mix(1.0, 0.8, face);
+  }
+  // ballast is dark with soot and oil
+  col *= mix(1.0, 0.5, wR);
+  // the road: horse traffic darkens the middle, dust lies by the kerbs,
+  // and the gutter stays damp in places, shining
+  float mid = smoothstep(-0.6, -3.5, kd) * (setts / max(road, 1e-3));
+  float stain = smoothstep(0.45, 0.85, gF(p * 0.45 + 3.0)) * mid;
+  col = mix(col, col * vec3(0.72, 0.66, 0.56), stain * 0.65 * road);
+  float dust = smoothstep(-2.5, -0.4, kd) * smoothstep(0.35, 0.7, gF(p * 0.3 + 11.0));
+  col = mix(col, vec3(0.26, 0.23, 0.18) * (0.8 + 0.4 * gN(p * 9.0)), dust * 0.35 * road);
+  float wet = gut * smoothstep(0.62, 0.8, gF(p * vec2(0.15, 0.15) + 5.0));
+  col *= 1.0 - 0.45 * wet;
+  gRough = mix(gRough, 0.12, wet);
+  // paving everywhere picks up a little grime at a larger scale
+  col *= 0.88 + 0.24 * gF(p * 0.06 + 1.7);
   // forest floor beyond the town: dark, needles and shade
   col = mix(col, mix(vec3(0.03, 0.045, 0.02), vec3(0.06, 0.07, 0.03), gF(p * 0.3)), wood);
-  float gRough = (0.85 * wS + 0.8 * wL + 0.97 * wG + 0.9 * wR + 0.95 * wV + 0.97 * wE) / tot;
-  // a little relief on the setts: each stone domed
-  vec3 gBump = vec3(0.0);
-  if (wS > 0.01) {
-    vec2 d = (f - 0.5) * vec2(0.15, 0.13);
-    gBump = vec3(d.x, 0.0, d.y) * 2.2 * wS * (1.0 - aa);
-    gBump = (viewMatrix * vec4(gBump, 0.0)).xyz;
-  }
-  // beside walls the sky is half hidden
+  // fields beyond the town: hay-coloured, in strips
+  if (!inside) col = mix(col, col * vec3(1.35, 1.15, 0.7), smoothstep(0.4, 0.6, gN(p * 0.004 + 3.0)) * (1.0 - wood));
+  // beside walls the sky is half hidden (the post pass's occlusion
+  // adds the close detail): the sky's light only
   float occ = texture2D(tC, tuv).r;
-  col *= 1.0 - 0.45 * occ;
+  gAO = ao * (1.0 - 0.35 * occ);
+  // the relief on the hills: tilt by the ground's own slope
+  vec3 geo = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
+  gNrm = normalize(nW + vec3(geo.x, 0.0, geo.z));
   diffuseColor.rgb = col;
 `;

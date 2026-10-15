@@ -1,35 +1,120 @@
 import * as THREE from 'three';
-import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { scene } from './renderer';
+import { renderer, scene } from './renderer';
+import { ATMO, ATMO_GLSL, LUT_GLSL, lightAt, type RGB } from './atmo';
 
 /* ── Sky, sun and haze ──────────────────────────────────────────
-   Preetham's daylight sky (three's Sky) for the dome, a sun whose
-   direction drives both the dome and the key light, a hemisphere
-   light for the sky's own fill, and exponential fog the colour of
-   the horizon for the haze a coal-heated town of 1900 had in its air.
+   The sky comes from a physical model of the atmosphere (atmo.ts),
+   rendered into a small sky-view lookup table whenever the sun has
+   moved enough to show; the dome, the clouds, the haze over distant
+   things (render/post.ts) and the environment map all read it, so
+   they agree. The same model gives the sun's colour and strength
+   where you stand (red and weak through the haze at sunset), the
+   sky's light on the ground, and from those the camera's exposure.
 
    The sun is set by time of day on a date: by default a late
-   afternoon in early summer (Potsdam, 52.4° N). */
-export const sky = new Sky();
-sky.scale.setScalar(5000);
-scene.add(sky);
-const su = sky.material.uniforms;
-su.turbidity!.value = 4.5;
-su.rayleigh!.value = 1.4;
-su.mieCoefficient!.value = 0.006;
-su.mieDirectionalG!.value = 0.82;
+   afternoon in early summer (Potsdam, 52.4° N). Everything here is
+   in linear HDR units; post.ts exposes and tone-maps. */
 
-export const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+/* ── The lookup table ─────────────────────────────────────────── */
+const LUT_W = 192, LUT_H = 108;
+const lutRT = new THREE.WebGLRenderTarget(LUT_W, LUT_H, {
+  type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false,
+  minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
+});
+lutRT.texture.wrapS = lutRT.texture.wrapT = THREE.ClampToEdgeWrapping;
+export const skyLUT = lutRT.texture;
+
+const FS_VERT = /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const lutMat = new THREE.ShaderMaterial({
+  uniforms: { uSunL: { value: new THREE.Vector3() }, uH: { value: 30 }, uSkyE: { value: new THREE.Vector3() } },
+  vertexShader: FS_VERT,
+  fragmentShader: /* glsl */ `
+    uniform vec3 uSunL, uSkyE; uniform float uH;
+    varying vec2 vUv;
+    ${ATMO_GLSL}
+    void main() {
+      // texel centres: u the azimuth from the sun, v the packed elevation
+      float az = vUv.x * A_PI;
+      float v = vUv.y * 2.0 - 1.0;
+      float el = sign(v) * v * v * A_PI * 0.5;
+      vec3 d = vec3(cos(el) * cos(az), sin(el), cos(el) * sin(az));
+      gl_FragColor = vec4(aSky(uH, d, uSunL, uSkyE), 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+const fsTri = new THREE.BufferGeometry();
+fsTri.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+fsTri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+const lutQuad = new THREE.Mesh(fsTri, lutMat);
+lutQuad.frustumCulled = false;
+const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+/* ── The dome ─────────────────────────────────────────────────────
+   A sphere round the eye, drawn first and without depth, so the post
+   pass knows sky pixels by their cleared depth. It adds the sun's
+   disc (0.27° across its radius, darker at the limb) and a faint
+   night sky. */
+export const SUN_DIR = new THREE.Vector3(0, 1, 0);
+const sunDisc = new THREE.Vector3();   // radiance of the disc's centre
+const NIGHT = new THREE.Vector3(0.0009, 0.0013, 0.0024);
+function skyMaterial(disc: boolean) {
+  return new THREE.ShaderMaterial({
+    uniforms: { tLUT: { value: skyLUT }, uSun: { value: SUN_DIR }, uDisc: { value: sunDisc }, uNight: { value: NIGHT } },
+    vertexShader: /* glsl */ `
+      varying vec3 vDir;
+      void main() {
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vDir = w.xyz - cameraPosition;
+        gl_Position = projectionMatrix * viewMatrix * w;
+        gl_Position.z = gl_Position.w * 0.99999;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tLUT; uniform vec3 uSun, uDisc, uNight;
+      varying vec3 vDir;
+      ${LUT_GLSL}
+      void main() {
+        vec3 d = normalize(vDir);
+        vec3 L = skyLUT(tLUT, d, uSun);
+        // the night: airglow and starlight, fading below the horizon
+        L += uNight * smoothstep(-0.2, 0.15, d.y);
+        ${disc ? `
+        float r = length(d - uSun) / 0.00465;
+        float w = fwidth(r) + 1e-4;
+        float inDisc = 1.0 - smoothstep(1.0 - w, 1.0 + w, r);
+        L += uDisc * inDisc * (0.45 + 0.55 * sqrt(max(0.0, 1.0 - r * r)));` : ''}
+        gl_FragColor = vec4(L, 1.0);
+      }`,
+    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+  });
+}
+export const sky = new THREE.Mesh(new THREE.SphereGeometry(4000, 48, 24), skyMaterial(true));
+sky.renderOrder = -10;
+sky.frustumCulled = false;
+sky.onBeforeRender = (_r, _s, cam) => { sky.position.copy(cam.position); sky.updateMatrixWorld(); };
+scene.add(sky);
+
+/* ── Lights ───────────────────────────────────────────────────────
+   The sun, with one shadow map 300 m across. Most of it lies ahead of
+   you: the box is pushed along the way you look, so its texels go to
+   what you can see. (A second, coarse map for the far town cost a
+   third of the frame rate on an Intel GPU even unused, so there is
+   none; beyond the box the haze and the walls' own shading carry it.) */
+export const sun = new THREE.DirectionalLight(0xffffff, ATMO.sunE);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-const S = 110;
-Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 900 });
+const S = 150;
+Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 1400 });
 sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.04;
+sun.shadow.normalBias = 0.05;
 scene.add(sun, sun.target);
-export const hemi = new THREE.HemisphereLight(0xfff0dc, 0xb59a78, 0.3);
-scene.add(hemi);
-scene.fog = new THREE.FogExp2(0xc9d3dc, 0.00065);
+
+/* What the light comes to where you stand: the sun's irradiance (rgb),
+   the sky's on level ground, and the exposure a camera would choose
+   for them. Read by the clouds, the post pass and the HUD probe. */
+export const light = {
+  sun: new THREE.Vector3(), sky: new THREE.Vector3(), ground: 1,
+  exposure: 1,
+};
 
 /* Stars for the night: points on a far sphere, fading in as the sky
    darkens below civil twilight. */
@@ -39,63 +124,22 @@ export const stars = (() => {
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < n; i++) {
     const z = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - z * z);
-    pos.set([r * Math.cos(a) * 4000, Math.abs(z) * 4000 + 60, r * Math.sin(a) * 4000], i * 3);
-    const b = Math.pow(rnd(), 3) * 0.9 + 0.1;
+    pos.set([r * Math.cos(a) * 3500, Math.abs(z) * 3500 + 60, r * Math.sin(a) * 3500], i * 3);
+    const b = (Math.pow(rnd(), 3) * 0.9 + 0.1) * 0.03;
     col.set([b, b, b * (0.9 + rnd() * 0.2)], i * 3);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const m = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false });
+  const m = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
   const p = new THREE.Points(g, m);
-  p.renderOrder = -1;
+  p.renderOrder = -9;
+  p.frustumCulled = false;
+  p.onBeforeRender = (_r, _s, cam) => { p.position.copy(cam.position); p.updateMatrixWorld(); };
   scene.add(p);
   return p;
 })();
 
-/* Clouds: fair-weather cumulus on a plane at 1.2 km that follows
-   the eye, drawn from fbm noise drifting with the wind, lit by the
-   sun's colour on top and greyer underneath, thinning toward the
-   horizon where the haze takes over. */
-export const cloudTime = { value: 0 };
-export const clouds = (() => {
-  const g = new THREE.PlaneGeometry(16000, 16000, 1, 1).rotateX(Math.PI / 2);
-  const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-    uniforms: { uT: cloudTime, uSun: { value: new THREE.Vector3() }, uSunCol: { value: new THREE.Color() }, uDay: { value: 1 }, uCover: { value: 0.5 } },
-    vertexShader: /* glsl */ `
-      varying vec3 vW;
-      void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: /* glsl */ `
-      uniform float uT, uDay, uCover; uniform vec3 uSun, uSunCol;
-      varying vec3 vW;
-      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
-      float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
-      void main() {
-        vec2 p = vW.xz / 900.0 + vec2(uT * 0.004, uT * 0.0015);
-        float d = fbm(p);
-        float c = smoothstep(1.0 - uCover, 1.0 - uCover + 0.28, d);
-        // a lit top and a grey belly: compare with a sample toward the sun
-        float d2 = fbm(p + uSun.xz * 0.06);
-        float lit = clamp(0.55 + (d - d2) * 3.0, 0.25, 1.0);
-        vec3 col = mix(vec3(0.55, 0.58, 0.64), uSunCol, lit) * (0.15 + 0.85 * uDay);
-        float dist = length(vW.xz - cameraPosition.xz);
-        float fade = 1.0 - smoothstep(2500.0, 7000.0, dist);
-        gl_FragColor = vec4(col, c * fade * 0.92);
-        #include <colorspace_fragment>
-      }`,
-  });
-  const mesh = new THREE.Mesh(g, m);
-  mesh.position.y = 1200;
-  mesh.renderOrder = -1;
-  mesh.frustumCulled = false;
-  scene.add(mesh);
-  return mesh;
-})();
-
-export const SUN_DIR = new THREE.Vector3();
 export const sunState = { hour: 17.5, day: 172 };   // day of year (21 June)
 
 /* Solar position for latitude φ: declination from the day, hour angle
@@ -115,38 +159,75 @@ export function sunDirection(hour: number, day: number, latDeg: number, out: THR
   return { alt, az };
 }
 
-export function updateSun(lat: number) {
+/* ── Keeping it current ───────────────────────────────────────────
+   The table depends only on the sun's altitude (it is laid out
+   relative to the sun's azimuth) and a little on the eye's height;
+   it is redrawn when either has moved enough to show, the light
+   and exposure with it, and the environment map less often. */
+let lutAlt = NaN, lutH = NaN, envAlt = NaN;
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 48, 24), skyMaterial(false)));
+let envRT: THREE.WebGLRenderTarget | null = null;
+const SUN_SOLID = 2 * Math.PI * (1 - Math.cos(0.00465));
+// Exposure: what a photographer would set for the light on the ground,
+// but only partly following it into the dusk, which should look dusky.
+const E_DAY = 4.6, EXP_DAY = 1.0;
+
+function refresh(alt: number, eyeH: number) {
+  const l = lightAt(alt, eyeH);
+  light.sun.set(...(l.sun as RGB));
+  light.sky.set(...(l.sky as RGB));
+  light.ground = l.ground[1];
+  light.exposure = EXP_DAY * Math.min(14, Math.pow(E_DAY / Math.max(1e-6, l.ground[1]), 0.55));
+  const peak = Math.max(l.sun[0], l.sun[1], l.sun[2]);
+  sun.intensity = peak;
+  if (peak > 0) sun.color.setRGB(l.sun[0] / peak, l.sun[1] / peak, l.sun[2] / peak);
+  // the disc: the sun's irradiance spread over its solid angle, held
+  // to what half floats (and the bloom) can take
+  const k = Math.min(1, 3000 / Math.max(1e-6, peak / SUN_SOLID));
+  sunDisc.set(l.sun[0] / SUN_SOLID * k, l.sun[1] / SUN_SOLID * k, l.sun[2] / SUN_SOLID * k);
+  const u = lutMat.uniforms;
+  u.uSunL!.value.set(Math.cos(alt), Math.sin(alt), 0);
+  u.uH!.value = eyeH;
+  u.uSkyE!.value.copy(light.sky);
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(lutRT);
+  renderer.render(lutQuad, fsCam);
+  renderer.setRenderTarget(prev);
+}
+
+function updateEnv() {
+  envRT?.dispose();
+  envRT = pmrem.fromScene(envScene, 0, 0.1, 1000);
+  scene.environment = envRT.texture;
+}
+
+export function updateSun(lat: number, eyeY = 2) {
   const { alt } = sunDirection(sunState.hour, sunState.day, lat, SUN_DIR);
-  su.sunPosition!.value.copy(SUN_DIR);
-  const e = Math.max(0, Math.sin(alt));
-  // Light falls off and reddens toward the horizon; below it, dusk.
-  const day = THREE.MathUtils.smoothstep(alt, -0.1, 0.12);
-  sun.intensity = 4.2 * THREE.MathUtils.smoothstep(alt, -0.02, 0.2);
-  sun.color.setRGB(1, 0.78 + 0.2 * Math.min(1, e * 2.2), 0.6 + 0.36 * Math.min(1, e * 2));
-  // The sky's own light comes from the environment map (main.ts); the
-  // hemisphere only adds the warm bounce off sunlit streets and walls.
-  hemi.intensity = 0.05 + 0.3 * day * Math.min(1, e * 3);
+  const eyeH = 30 + Math.max(0, eyeY);
+  if (!(Math.abs(alt - lutAlt) < 0.0015) || !(Math.abs(eyeH - lutH) < 40)) {
+    lutAlt = alt; lutH = eyeH;
+    refresh(alt, eyeH);
+  }
+  if (!(Math.abs(alt - envAlt) < 0.01)) { envAlt = alt; updateEnv(); }
   (stars.material as THREE.PointsMaterial).opacity = THREE.MathUtils.smoothstep(-alt, 0.06, 0.2);
-  const cu = (clouds.material as THREE.ShaderMaterial).uniforms;
-  cu.uSun!.value.copy(SUN_DIR);
-  (cu.uSunCol!.value as THREE.Color).copy(sun.color).lerp(new THREE.Color(1, 1, 1), 0.4);
-  cu.uDay!.value = day;
-  const fog = scene.fog as THREE.FogExp2;
-  fog.color.setRGB(0.78, 0.82, 0.86).lerp(new THREE.Color(0.95, 0.72, 0.55), Math.max(0, 1 - e * 4) * day * 0.5).multiplyScalar(0.03 + 0.97 * day);
   return alt;
 }
 
-// Keep the shadow camera on the player, snapped to its texels so
-// shadow edges do not crawl as you walk.
+// Keep the shadow camera ahead of the eye (fx, fz: the way you look,
+// level), snapped to its texels so shadow edges do not crawl as you
+// walk or turn.
 const _rx = new THREE.Vector3(), _ry = new THREE.Vector3(), _t = new THREE.Vector3();
-export function placeShadow(x: number, y: number, z: number) {
+export function placeShadow(x: number, y: number, z: number, fx = 0, fz = 0) {
   const cam = sun.shadow.camera;
+  const ahead = (cam.right - cam.left) * 0.38;
   const texel = (cam.right - cam.left) / sun.shadow.mapSize.x;
   _rx.set(0, 1, 0).cross(SUN_DIR).normalize();
   _ry.copy(SUN_DIR).cross(_rx);
-  _t.set(x, y, z);
+  _t.set(x + fx * ahead, y, z + fz * ahead);
   const ex = _t.dot(_rx), ey = _t.dot(_ry);
   _t.addScaledVector(_rx, Math.round(ex / texel) * texel - ex).addScaledVector(_ry, Math.round(ey / texel) * texel - ey);
   sun.target.position.copy(_t);
-  sun.position.copy(_t).addScaledVector(SUN_DIR, 450);
+  sun.position.copy(_t).addScaledVector(SUN_DIR, 700);
 }

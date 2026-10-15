@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { buildBuildings, nightLight, sourceView } from './city/buildings';
 import { buildGround } from './city/ground';
 import { buildColumns, buildFixtures, buildLamps, buildRails, buildTrees, buildWalls, buildWoods, lampGlow } from './city/props';
@@ -12,8 +11,11 @@ import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
 import { look } from './player/input';
-import { camera, pitchObj, renderer, scene, yawObj } from './render/renderer';
-import { SUN_DIR, cloudTime, clouds, hemi, placeShadow, sky, sun, sunState, updateSun } from './render/sky';
+import { pitchObj, renderer, scene, yawObj } from './render/renderer';
+import { SUN_DIR, light, placeShadow, sun, sunState, updateSun } from './render/sky';
+import { updateClouds } from './render/clouds';
+let cpuMs = 0;
+import { PREPASS_LAYER, renderFrame } from './render/post';
 import { hud, note } from './ui/hud';
 import { historicMap } from './ui/map';
 import { sound } from './audio/sound';
@@ -37,7 +39,9 @@ setTerrain(city.terrain);
 const ground = buildGround(city);
 scene.add(ground.mesh);
 scene.add(buildWater(city, ground));
-scene.add(buildBuildings(city.buildings));
+const buildings = buildBuildings(city.buildings);
+buildings.traverse((o) => o.layers.enable(PREPASS_LAYER));
+scene.add(buildings);
 scene.add(buildTrees(city));
 scene.add(buildWoods(city));
 scene.add(buildWalls(city));
@@ -54,30 +58,13 @@ scene.add(boats.group);
 quality.apply();
 const segs = buildSegs(city);
 const tour = makeTour(city);
-// The sky through the environment map is the ambient light: about
-// a fifth of the sun's on a clear afternoon, which 0.7 gives here.
+// The sky through the environment map (sky.ts) is the ambient light.
+// Diffuse surfaces take a little less than the open sky would give:
+// in streets the houses opposite hide much of it.
 scene.traverse((o) => {
   const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
   if (m && 'envMapIntensity' in m && m.roughness > 0.3) m.envMapIntensity = 0.7;
 });
-
-// Reflections: the sky alone, prefiltered for the standard materials,
-// rebuilt when the sun has moved far enough to show.
-const pmrem = new THREE.PMREMGenerator(renderer);
-const envScene = new THREE.Scene();
-const envSky = new Sky();
-envSky.scale.setScalar(1000);
-envScene.add(envSky);
-let envRT: THREE.WebGLRenderTarget | null = null, envHour = NaN;
-function updateEnv() {
-  if (Math.abs(envHour - sunState.hour) < 0.25) return;
-  envHour = sunState.hour;
-  for (const k of ['turbidity', 'rayleigh', 'mieCoefficient', 'mieDirectionalG'] as const) envSky.material.uniforms[k]!.value = sky.material.uniforms[k]!.value;
-  envSky.material.uniforms.sunPosition!.value.copy(SUN_DIR);
-  envRT?.dispose();
-  envRT = pmrem.fromScene(envScene, 0, 0.1, 2000);
-  scene.environment = envRT.texture;
-}
 
 const start = parseView(location.hash);
 walker.x = start?.x ?? city.spawn.x;
@@ -142,7 +129,7 @@ if (probe) {
       return true;
     },
     state() {
-      return JSON.stringify({ boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray(), hemi: hemi.intensity, env: !!scene.environment, hour: sunState.hour, tone: renderer.toneMapping, exp: renderer.toneMappingExposure });
+      return JSON.stringify({ boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), cpu: +cpuMs.toFixed(1), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray().map((v) => +v.toFixed(3)), sky: light.sky.toArray().map((v) => +v.toFixed(4)), env: !!scene.environment, hour: sunState.hour, exp: +light.exposure.toFixed(3) });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -158,7 +145,9 @@ const lampLights = Array.from({ length: 8 }, () => {
 });
 let lampT = 0;
 function placeLampLights(glow: number) {
-  for (const l of lampLights) l.intensity = glow * 40;
+  // dim, as gas mantles were: pools of light under each lantern (the
+  // exposure opens up some fourteen times at night, sky.ts)
+  for (const l of lampLights) l.intensity = glow * 11;
   if (glow <= 0 || (lampT -= 1 / 60) > 0) return;
   lampT = 0.5;
   const near = city.lamps.map((l) => ({ l, d: (l.x - walker.x) ** 2 + (l.z - walker.z) ** 2 })).sort((a, b) => a.d - b.d).slice(0, lampLights.length);
@@ -215,27 +204,27 @@ renderer.setAnimationLoop(() => {
   yawObj.position.set(walker.x + Math.cos(walker.yaw) * walker.sway, walker.y, walker.z - Math.sin(walker.yaw) * walker.sway);
   yawObj.rotation.y = walker.yaw;
   pitchObj.rotation.x = walker.pitch;
-  const alt = updateSun(LAT);
+  const alt = updateSun(LAT, walker.y);
   // the lamplighter comes round as the sun goes down
   lampGlow.value = THREE.MathUtils.smoothstep(-alt, -0.05, 0.08);
   nightLight.value = THREE.MathUtils.smoothstep(-alt, -0.02, 0.12);
   placeLampLights(lampGlow.value);
-  updateEnv();
-  placeShadow(walker.x, 0, walker.z);
+  placeShadow(walker.x, 0, walker.z, -Math.sin(walker.yaw), -Math.cos(walker.yaw));
   waterTime.value += dt;
   // under the probe, traffic and people hold still, so shots repeat
   traffic.step(probe ? 0 : dt);
   boats.step(probe ? 0 : dt, city.water);
   people.step(probe ? 0 : dt, walker.x, walker.z, nightLight.value);
-  cloudTime.value += dt;
-  clouds.position.x = walker.x; clouds.position.z = walker.z;
+  updateClouds(dt, walker.x, walker.z);
   hud.update(dt, walker, sunState.hour, ground, sunState.day);
   historicMap.draw(walker.x, walker.z, walker.yaw);
   if ((hashT += dt) > 1 && !probe) {
     hashT = 0;
     history.replaceState(null, '', viewHash(walker, sunState.hour));
   }
-  renderer.render(scene, camera);
+  const tR = performance.now();
+  renderFrame();
+  cpuMs = cpuMs * 0.9 + (performance.now() - tR) * 0.1;
   const w = frameWaiters.splice(0);
   for (const f of w) f();
 });

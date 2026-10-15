@@ -20,7 +20,7 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 
 `bun run test`, not `bun test` (Vitest on Node). Tools run directly under Node's type stripping: imports with `.ts` extensions, no parameter properties or enums (`erasableSyntaxOnly` in `tools/tsconfig.json` checks this).
 
-**Verify visual changes with `tools/shot.ts`**: it starts Vite, opens the page in headless Firefox with `?probe`, sets each view through `window.hw.go(hash)` and saves PNGs; `|KeyM` after a hash presses keys first (and again after, to undo toggles). Read the PNGs. The view hash is `x`, `z` (metres, local frame), `yaw` (degrees, 0 north, 90 west), `pitch`, `t` (local solar hour; the HUD shows the clock, Central European Time since 1893), `y` (eye height — means flying). For checking data, rasterise it over the historical map with a small PIL script (data/potsdam/mtb1903.png covers `city.bounds` exactly, pixel-linear).
+**Verify visual changes with `tools/shot.ts`**: it starts Vite, opens the page in headless Firefox with `?probe`, sets each view through `window.hw.go(hash)` and saves PNGs; `|KeyM` after a hash presses keys first (and again after, to undo toggles). `--fps` measures the frame rate after each shot (the probe's state has `cpu`, the render's own ms); `--query=off=ao,bloom,msaa,shadow,prepass` times parts of the pipeline, `--query=debug=ao` shows the occlusion. The dev machine is a laptop iGPU: watch the frame rate. Read the PNGs. The view hash is `x`, `z` (metres, local frame), `yaw` (degrees, 0 north, 90 west), `pitch`, `t` (local solar hour; the HUD shows the clock, Central European Time since 1893), `y` (eye height — means flying). For checking data, rasterise it over the historical map with a small PIL script (data/potsdam/mtb1903.png covers `city.bounds` exactly, pixel-linear).
 
 ## Layout
 
@@ -30,7 +30,9 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 - `src/city/` — `massing.ts` (pure: walls and roofs of one building), `buildings.ts` (merged meshes per 200 m tile, facade and roof shaders), `ground.ts` (the plan rasterised into weight textures; also answers `isWater`/`surface` for the walker), `water.ts`, `props.ts` (trees, walls and railings, columns).
 - `src/city/terrain.ts` — `heightAt()`, the one height source: the ground mesh, buildings (at their lowest corner), props, the tram, people and the walker all ask it. Zero in the town and on the water.
 - `src/city/traffic.ts` (the horse tram on the joined OHM routes), `src/city/people.ts` (pedestrians, instanced parts posed per frame), `src/audio/sound.ts` (all synthesised).
-- `src/player/` — input (keys, mouse, touch), collision (segments on a grid), walker. `src/render/` — renderer, sky, sun, clouds, stars. `src/ui/` — HUD, the 1903 map. `src/app/view.ts` — the URL hash.
+- `src/player/` — input (keys, mouse, touch), collision (segments on a grid), walker. `src/ui/` — HUD, the 1903 map. `src/app/view.ts` — the URL hash.
+- `src/render/` — `atmo.ts` (pure: the atmosphere model, single scattering with Rayleigh, haze and ozone; its GLSL twin; tested), `sky.ts` (the sky-view lookup table, dome, sun light and shadow box, environment map, exposure), `clouds.ts` (cumulus baked into a density/light map), `post.ts` (HDR target with MSAA and depth → AO, water reflections, haze, bloom, AgX → screen; depth pre-pass), `waves.ts` (ripples shared by the water and the post pass), `quality.ts` (tiers).
+- `src/city/groundtex.ts` — ground surfaces baked once into texture arrays (setts, slabs, mosaic, gravel, grass, earth); `ground.ts` lays them by the raster and by a street frame (distance to the kerb, street bearing) computed from the street lines.
 
 ## Things that are easy to break
 
@@ -40,11 +42,15 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 - **Names**: show only names of the year — OHM's and the landmarks'. OSM names are today's.
 - **Hashes in tools** are unsigned (`>>> 0`); shift them with `>>>`, never `>>` (a negative index once left half the rebuilt houses without a colour).
 - Ground texture channels: A = setts, slabs, grass; B = water, rail, gravel; C (half resolution) = blurred footprints for contact shade. Painted opaque in order, so weights sum to at most one. Water discards the ground; the walker reads the same raster.
-- three r160: `onBeforeCompile` uniforms need their GLSL declared; `customProgramCacheKey` per patched material.
+- three r160: `onBeforeCompile` uniforms need their GLSL declared; `customProgramCacheKey` per patched material. Array render targets are mipmapped as 2D textures (broken): `groundtex.ts` mipmaps by hand.
+- **Light units**: the noon sun at the ground is about 5 (`atmo.ts` `sunE`); emissive lamps and windows are in those units, and the exposure opens up to ×14 at night (`sky.ts`), so artificial light is dim on purpose.
+- **Post pass contracts**: the water writes alpha 0 (that is how `post.ts` finds it; every other opaque material writes 1); the sky dome writes no depth (cleared depth = sky); objects on `PREPASS_LAYER` (the buildings) are drawn depth-only first, so nothing that discards fragments may be on it.
+- **Shader patches by text**: facades (`buildings.ts`, the relief's sun shadow) and leaves (`props.ts`, translucency) patch three's `lights_fragment_begin` after `getDirectionalLightInfo( directionalLight, directLight );`; the facade and roof shaders apply the vertex colour themselves (three's `color_fragment` is removed), so their window, sash and stone colours are their own.
+- **Instanced people** draw only those near you, packed at the front of each part's buffers, and upload only that range: a full upload of 1200 slots × 11 parts cost a third of the frame.
 
 ## Toward a shared engine
 
-The user may split the engine from the cities (and from [lunar-walk](https://github.com/fwilhe2/lunar-walk)) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. The app picks the city by `?city=<id>` (default potsdam) from `src/cities/*/city.json`; the busy centre, the bell towers and the map raster come from the city's data.
+The user may split the engine from the cities (and from [lunar-walk](https://github.com/fwilhe2/lunar-walk)) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,groundtex,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. The app picks the city by `?city=<id>` (default potsdam) from `src/cities/*/city.json`; the busy centre, the bell towers and the map raster come from the city's data.
 
 ## Writing history
 

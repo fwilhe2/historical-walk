@@ -10,25 +10,33 @@ import type { City } from './types';
    which still closed the town in 1900 (it came down 1900–1905), and
    garden walls, as plastered boxes along their lines with a coping. */
 
-/* A sprig of leaves on a transparent canvas: the texture every leaf
-   card of every crown shares. Lindens and chestnuts at 50 m read as a
+/* A spray of leaves on a transparent canvas: the texture every leaf
+   card of every crown shares. A card is a couple of metres across, so
+   a linden's leaf (8–10 cm) is a few per cent of it: some 2500 small
+   leaves on twigs, in the greens of a tree in summer, darker and
+   lighter, a few yellowing. Lindens and chestnuts at 50 m read as a
    mass of small leaves with sky through it, which is what this is. */
 function leafTexture() {
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = 1024;
   const g = c.getContext('2d')!;
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  g.strokeStyle = 'rgba(70,55,40,0.9)'; g.lineWidth = 2;
-  for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(128, 250); g.lineTo(30 + rnd() * 196, 20 + rnd() * 150); g.stroke(); }
-  for (let i = 0; i < 260; i++) {
-    const x = 16 + rnd() * 224, y = 10 + rnd() * 220;
-    const dx = x - 128, dy = y - 120;
-    if (dx * dx / 1.1 + dy * dy > 118 * 118) continue;   // a rounded sprig
-    const l = 0.35 + rnd() * 0.65;
-    g.fillStyle = `rgb(${Math.round(70 * l + 20)},${Math.round(120 * l + 35)},${Math.round(40 * l + 10)})`;
+  g.strokeStyle = 'rgba(60,48,36,0.9)'; g.lineWidth = 4;
+  for (let k = 0; k < 9; k++) { g.beginPath(); g.moveTo(512, 1010); g.quadraticCurveTo(300 + rnd() * 424, 600, 80 + rnd() * 864, 60 + rnd() * 600); g.stroke(); }
+  for (let i = 0; i < 2600; i++) {
+    const x = 40 + rnd() * 944, y = 30 + rnd() * 900;
+    const dx = x - 512, dy = y - 480;
+    if (dx * dx / 1.15 + dy * dy > 470 * 470) continue;   // a rounded spray
+    const l = 0.4 + rnd() * 0.6, yel = rnd() < 0.06 ? 1 : 0;
+    const r = Math.round(38 * l + 18 + yel * 60), gg = Math.round(62 * l + 32 + yel * 40), b = Math.round(20 * l + 10);
+    g.fillStyle = `rgb(${r},${gg},${b})`;
     g.save(); g.translate(x, y); g.rotate(rnd() * Math.PI * 2);
-    g.beginPath(); g.ellipse(0, 0, 9 + rnd() * 5, 5 + rnd() * 3, 0, 0, Math.PI * 2); g.fill();
+    const w = 11 + rnd() * 6, h = 8 + rnd() * 4;
+    // a heart-shaped leaf with a pointed tip, lighter on one half
+    g.beginPath(); g.moveTo(-w, 0); g.quadraticCurveTo(-w * 0.2, -h * 1.3, w, 0); g.quadraticCurveTo(-w * 0.2, h * 1.3, -w, 0); g.fill();
+    g.fillStyle = `rgba(255,255,220,${0.05 + rnd() * 0.08})`;
+    g.beginPath(); g.moveTo(-w, 0); g.quadraticCurveTo(-w * 0.2, -h * 1.3, w, 0); g.closePath(); g.fill();
     g.restore();
   }
   const t = new THREE.CanvasTexture(c);
@@ -40,19 +48,21 @@ function leafTexture() {
 /* One crown: leaf cards scattered through a unit ellipsoid, turned
    every way, with normals pointing out from the crown's centre so the
    whole crown shades like one soft volume (lit side, shaded side)
-   rather than as a heap of flat cards. */
+   rather than as a heap of flat cards. Cards deep inside and under the
+   crown see less sky: a vertex colour darkens them. */
 function crownGeometry() {
-  const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], col: number[] = [];
   let seed = 11;
   const rnd = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
   const v = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), n = new THREE.Vector3();
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 72; i++) {
     // a point in the ellipsoid, biased outward
     do { v.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (v.lengthSq() > 1);
     v.multiplyScalar(0.55 + 0.45 * Math.cbrt(v.length()) / Math.max(v.length(), 1e-3) * v.length());
     a.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
     b.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).cross(a).normalize();
-    const s = 0.55 + rnd() * 0.3;
+    const s = 0.38 + rnd() * 0.22;
+    const ao = 0.35 + 0.65 * THREE.MathUtils.smoothstep(v.length() * 0.8 + v.y * 0.35, 0.1, 1.0);
     const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
     const P = corners.map(([p, q]) => v.clone().addScaledVector(a, p * s).addScaledVector(b, q * s));
     for (const k of [0, 1, 2, 0, 2, 3]) {
@@ -61,12 +71,14 @@ function crownGeometry() {
       n.copy(p).normalize();
       nrm.push(n.x, n.y, n.z);
       uv.push((corners[k]![0] + 1) / 2, (corners[k]![1] + 1) / 2);
+      col.push(ao, ao, ao);
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   return g;
 }
 
@@ -95,7 +107,18 @@ export function buildTrees(city: City) {
   const n = city.trees.length;
   if (!n) return group;
   const trunk = new THREE.InstancedMesh(trunkGeometry(), new THREE.MeshStandardMaterial({ color: 0x3f342b, roughness: 0.95 }), n);
-  const leaves = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.45, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85 });
+  const leaves = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.45, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.75, vertexColors: true });
+  // Leaves let light through: lit from behind they glow yellow-green,
+  // and the shaded side of a crown still gets some of the sun.
+  leaves.onBeforeCompile = (sh) => {
+    const L = THREE.ShaderChunk.lights_fragment_begin;
+    const i = L.indexOf('RE_Direct(', L.indexOf('getDirectionalLightInfo( directionalLight, directLight );'));
+    sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', L.slice(0, i) + `
+		reflectedLight.directDiffuse += directLight.color * diffuseColor.rgb * vec3(1.15, 1.3, 0.55)
+			* ( 0.22 * max( 0.0, -dot( geometryNormal, directLight.direction ) ) + 0.5 * pow( max( 0.0, -dot( geometryViewDir, directLight.direction ) ), 6.0 ) );
+		` + L.slice(i));
+  };
+  leaves.customProgramCacheKey = () => 'leaves';
   const crown = new THREE.InstancedMesh(crownGeometry(), leaves, n);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
   const col = new THREE.Color();
@@ -107,8 +130,9 @@ export function buildTrees(city: City) {
     trunk.setMatrixAt(i, m);
     m.compose(t.set(tr.x, gy + trunkH + (tr.h - trunkH) * 0.45, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
     crown.setMatrixAt(i, m);
-    const k = (i * 0.618) % 1;
-    crown.setColorAt(i, col.setRGB(0.62 + 0.22 * k, 0.66 + 0.14 * k, 0.5 + 0.15 * (1 - k)));
+    // each tree its own green: some bluer, some yellower, some darker
+    const k = (i * 0.618) % 1, d = (i * 0.377) % 1;
+    crown.setColorAt(i, col.setRGB((0.8 + 0.25 * k) * (0.8 + 0.25 * d), (0.85 + 0.15 * k) * (0.8 + 0.25 * d), (0.75 + 0.3 * (1 - k)) * (0.8 + 0.25 * d)));
   });
   trunk.castShadow = crown.castShadow = true;
   crown.receiveShadow = true;
@@ -218,7 +242,7 @@ export function buildLamps(city: City) {
   glass.onBeforeCompile = (sh) => {
     sh.uniforms.uGlow = lampGlow;
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.7, 0.35) * uGlow * 6.0;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.7, 0.35) * uGlow * 3.0;');
   };
   glass.customProgramCacheKey = () => 'lampglass';
   const parts: [THREE.BufferGeometry, THREE.Material][] = [

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WAVES_GLSL, waterTime } from '../render/waves';
 import type { Ground } from './ground';
 import type { City } from './types';
 
@@ -8,9 +9,14 @@ import type { City } from './types';
    edges get quay walls — dressed stone from the street down past the
    water line — along every edge of a water area that has land
    behind it (edges between two water areas are skipped, by asking
-   the ground's raster a step to either side). */
+   the ground's raster a step to either side).
 
-export const waterTime = { value: 0 };
+   The plane draws the water's body (the little light that comes back
+   up out of a green river) and the sun's glitter; its reflections of
+   the town and the sky are added in the post pass (render/post.ts),
+   which finds water by the zero alpha this writes. */
+
+export { waterTime };
 
 export function buildWater(city: City, ground: Ground) {
   const group = new THREE.Group();
@@ -20,25 +26,21 @@ export function buildWater(city: City, ground: Ground) {
   const geo = new THREE.PlaneGeometry(x1 - x0 + 2 * M, z1 - z0 + 2 * M, 1, 1);
   geo.rotateX(-Math.PI / 2);
   geo.translate((x0 + x1) / 2, city.water, (z0 + z1) / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x1d2a26, roughness: 0.06, metalness: 0.0 });
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.07, metalness: 0.0, envMapIntensity: 0 });
+  mat.color.setRGB(0.022, 0.034, 0.028);
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uT = waterTime;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWp;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uT;\nvarying vec3 vWp;')
+      .replace('#include <common>', '#include <common>\nuniform float uT;\nvarying vec3 vWp;\n' + WAVES_GLSL)
       .replace('#include <normal_fragment_maps>', /* glsl */ `
-        // a few travelling ripple trains, fading with distance
-        vec2 q = vWp.xz;
-        float fade = 1.0 - smoothstep(30.0, 400.0, length(vWp - cameraPosition));
-        vec2 g = vec2(0.0);
-        g += vec2(0.8, 0.6) * cos(dot(q, vec2(0.8, 0.6)) * 2.1 + uT * 1.7) * 0.05;
-        g += vec2(-0.5, 0.86) * cos(dot(q, vec2(-0.5, 0.86)) * 3.3 + uT * 2.3) * 0.035;
-        g += vec2(0.3, -0.95) * cos(dot(q, vec2(0.3, -0.95)) * 5.9 + uT * 3.1) * 0.02;
-        g += vec2(-0.9, -0.3) * cos(dot(q, vec2(-0.9, -0.3)) * 9.7 + uT * 4.2) * 0.012;
-        normal = normalize(normal + (viewMatrix * vec4(g.x, 0.0, g.y, 0.0)).xyz * fade);
-      `);
+        vec2 g = waterSlope(vWp.xz, uT, length(fwidth(vWp.xz)));
+        normal = normalize((viewMatrix * vec4(-g.x, 1.0, -g.y, 0.0)).xyz);
+      `)
+      // alpha 0 marks water for the post pass
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\ngl_FragColor.a = 0.0;');
   };
   mat.customProgramCacheKey = () => 'water';
   const plane = new THREE.Mesh(geo, mat);

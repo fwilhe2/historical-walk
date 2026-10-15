@@ -48,6 +48,12 @@ three r160, Bun), rebuilt small for a town instead of a planet.
   gardens, and the hills (the Brauhausberg across the river).
 - **Time** runs at the clock's pace; the sun follows Potsdam's latitude,
   windows and shops light up at night, the bells strike the hours.
+- **Light** from a physical model of the atmosphere (air, the haze of a
+  coal-heated town, ozone): the sky, the sun's colour and strength, the
+  light from the sky and the land, and the haze over distance all come
+  from it, from noon to the blue hour; cumulus drift on the wind. The
+  frame is rendered in HDR and exposed like a camera's, with ambient
+  occlusion, bloom and AgX tone mapping; the water mirrors the town.
 
 ## Where the city comes from
 
@@ -113,13 +119,19 @@ landmarks, with sources and with every estimated number marked as such.
 ### Known approximations
 
 - Facades are drawn in the shader (window bays, doors, sills, cornice,
-  plinth) from each wall's length and storey height, not from the real
-  elevations; roofs follow the footprint's rectangle (or rise from every
-  eave on irregular footprints), without dormers.
+  plinth, the shadows these throw in the sun, rooms and curtains behind
+  the glass, weathering) from each wall's length and storey height, not
+  from the real elevations; roofs follow the footprint's rectangle (or
+  rise from every eave on irregular footprints).
 - Trees are today's trees from OSM.
 - The ground is level; the Havel and the canal lie 1.6 m below it.
-- Street paving is setts on carriageways and slabs on pavements
-  everywhere.
+- Street paving is the same everywhere: granite setts in rows across
+  the carriageway with a gutter and kerbstones, and on the pavements a
+  band of granite slabs between strips of mosaic, up to the houses.
+- The water's reflections are found on screen: what is out of view is
+  not mirrored (the sky stands in for it).
+- Shadows reach some 250 m ahead of you; beyond, the haze and the walls'
+  own shading carry the light.
 
 ## Pipeline
 
@@ -129,6 +141,7 @@ bun run city potsdam       # src/cities/potsdam/city.json (no network)
 bun run check              # tsc: app, tests, tools
 bun run test               # vitest
 node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]'   # screenshots (headless Firefox)
+node tools/shot.ts OUT … --fps --query=off=ao,bloom   # with frame rates, parts of the post pass off
 ```
 
 The reduced map data and the map raster are committed, so building the
