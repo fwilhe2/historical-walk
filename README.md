@@ -22,7 +22,7 @@ hides the HUD. Time runs at the clock's pace: the Garnisonkirche strikes
 the hours, St. Nikolai the quarters. The URL hash always holds your
 position, so a view can be shared.
 
-The engine follows [lunar-walk](../lunar-walk) (Vite, TypeScript,
+The engine follows [lunar-walk](https://github.com/fwilhe2/lunar-walk) (Vite, TypeScript,
 three r160, Bun), rebuilt small for a town instead of a planet.
 
 ## What is there

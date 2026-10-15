@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A first-person walk through a historical city (Potsdam, 1900), built from map data, not procedurally: today's OpenStreetMap filtered and completed by OpenHistoricalMap's dated features and a georeferenced historical map (the Messtischblatt of 1903). TypeScript on Vite, three r160 (pinned), Bun. Shaped after `../lunar-walk`; a shared engine repo may be split out later, so keep engine code (render, player, ui, geom, city/massing) free of Potsdam specifics. `README.md` explains where the city comes from — read it before changing anything that decides what is shown for 1900.
+A first-person walk through a historical city (Potsdam, 1900), built from map data, not procedurally: today's OpenStreetMap filtered and completed by OpenHistoricalMap's dated features and a georeferenced historical map (the Messtischblatt of 1903). TypeScript on Vite, three r160 (pinned), Bun. Shaped after [lunar-walk](https://github.com/fwilhe2/lunar-walk); a shared engine repo may be split out later, so keep engine code (render, player, ui, geom, city/massing) free of Potsdam specifics. `README.md` explains where the city comes from — read it before changing anything that decides what is shown for 1900.
 
 ## Running
 
@@ -44,7 +44,7 @@ node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]
 
 ## Toward a shared engine
 
-The user may split the engine from the cities (and from ../lunar-walk) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. The app picks the city by `?city=<id>` (default potsdam) from `src/cities/*/city.json`; the busy centre, the bell towers and the map raster come from the city's data.
+The user may split the engine from the cities (and from [lunar-walk](https://github.com/fwilhe2/lunar-walk)) later. Keep the line clean: `src/render`, `src/player`, `src/ui`, `src/geom`, `src/city/{massing,buildings,ground,water,props,terrain,traffic,people}.ts` must not name Potsdam or hard-code its places; city specifics live in `tools/cities.ts`, `tools/history/<city>*.ts` and the generated `city.json`. The app picks the city by `?city=<id>` (default potsdam) from `src/cities/*/city.json`; the busy centre, the bell towers and the map raster come from the city's data.
 
 ## Writing history
 
