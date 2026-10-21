@@ -290,13 +290,259 @@ function ringWalls(b: Building, r: Ring, rp: RoofPlan, out: WallBuf) {
   }
 }
 
-export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf, withDormers = true) {
+/* What the details need to know of the neighbours, and where the
+   metalwork goes. exposed(a, b) is false for a party wall: an edge
+   another building stands against. */
+export interface MetalBuf { pos: number[]; nrm: number[] }
+export const metalBuf = (): MetalBuf => ({ pos: [], nrm: [] });
+// awnings: uv in metres (across the shop, out from the wall), col the stripes' colour
+export interface ClothBuf { pos: number[]; nrm: number[]; uv: number[]; col: number[] }
+export const clothBuf = (): ClothBuf => ({ pos: [], nrm: [], uv: [], col: [] });
+export interface Details { exposed?: (ax: number, az: number, bx: number, bz: number) => boolean; metal?: MetalBuf; cloth?: ClothBuf }
+
+export function buildMassing(b: Building, walls: WallBuf, roofs: RoofBuf, withDormers = true, details: Details = {}) {
   const rp = roofPlanes(b);
   roofs.cur = SRC_CODE[b.src];
   ringWalls(b, b.outer, rp, walls);
   for (const h of b.holes ?? []) ringWalls(b, h, rp, walls);
   roofFaces(b, rp, roofs, b.eave);
-  if (withDormers) { dormers(b, rp, walls, roofs); chimneys(b, rp, walls, roofs); }
+  if (withDormers) {
+    dormers(b, rp, walls, roofs); chimneys(b, rp, walls, roofs);
+    for (const r of [b.outer, ...(b.holes ?? [])]) eaves(b, r, rp, walls, roofs, details);
+    if (b.shop && details.cloth) awnings(b, details);
+    doorSteps(b, walls, details);
+  }
+}
+
+/* ── Door steps ────────────────────────────────────────────────────
+   A front door stood a step or two above the pavement: a block of
+   sandstone or granite before it, 1.9 m wide, 45 cm deep, 17 cm over
+   the pavement (an estimate), where the facade shader puts the door — the middle
+   bay of a wall of three bays or more — on walls that stand free. */
+function doorSteps(b: Building, walls: WallBuf, det: Details) {
+  if (b.windows === false || (b.base ?? 0) > 0.5 || b.kind === 'colonnade' || b.kind === 'gate' || b.kind === 'church') return;
+  const seed = (parseInt(b.id.replace(/\D/g, '').slice(-6) || '0', 10) % 997) / 997;
+  const grand = b.kind === 'palace' || b.kind === 'public';
+  const bay = grand ? 4.0 : 2.9 + 0.6 * seed;
+  // the step's faces carry the plinth's stone (the facade draws below 60 cm as stone)
+  const fac = [b.eave, b.storey, 1.9, 1 + 128 * SRC_CODE[b.src]];
+  const col = hexRGB(b.colour);
+  const r = b.outer, n = r.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = r[2 * i]!, az = r[2 * i + 1]!, bx = r[2 * j]!, bz = r[2 * j + 1]!;
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+    if (L <= 7) continue;
+    const nb = Math.max(1, Math.floor(L / bay));
+    if (nb < 3) continue;
+    if (det.exposed && !det.exposed(ax, az, bx, bz)) continue;
+    const tx = dx / L, tz = dz / L, nx = dz / L, nz = -dx / L;
+    const uc = (Math.floor(nb / 2) + 0.5) * (L / nb);
+    // (17 cm over the pavement, which stands a kerb's height over the ground the house stands on)
+    const W = grand ? 2.6 : 1.9, D = 0.45, H = 0.31, y0 = b.base ?? 0;
+    const P = (u: number, o: number, y: number) => [ax + tx * (uc + u) + nx * o, y0 + y, az + tz * (uc + u) + nz * o];
+    const quad = (q: number[][], nn: number[], uv: number[][]) => {
+      const e1 = [0, 1, 2].map((c) => q[1]![c]! - q[0]![c]!), e2 = [0, 1, 2].map((c) => q[2]![c]! - q[0]![c]!);
+      const cr = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+      const order = cr[0]! * nn[0]! + cr[1]! * nn[1]! + cr[2]! * nn[2]! >= 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+      for (const k of order) { walls.pos.push(...q[k]!); walls.nrm.push(...nn); walls.uv.push(...uv[k]!); walls.fac.push(...fac); walls.col.push(...col); }
+    };
+    const h = W / 2;
+    quad([P(-h, D, 0), P(h, D, 0), P(h, D, H), P(-h, D, H)], [nx, 0, nz], [[0, 0], [W, 0], [W, H], [0, H]]);
+    quad([P(-h, 0, H), P(h, 0, H), P(h, D, H), P(-h, D, H)], [0, 1, 0], [[0, 0.1], [W, 0.1], [W, 0.4], [0, 0.4]]);
+    quad([P(-h, 0, 0), P(-h, D, 0), P(-h, D, H), P(-h, 0, H)], [-tx, 0, -tz], [[0, 0], [D, 0], [D, H], [0, H]]);
+    quad([P(h, D, 0), P(h, 0, 0), P(h, 0, H), P(h, D, H)], [tx, 0, tz], [[0, 0], [D, 0], [D, H], [0, H]]);
+  }
+}
+
+/* ── Awnings ───────────────────────────────────────────────────────
+   Over the shop windows on the sunny side (fronts facing south to
+   west), most shops let down a canvas awning: from under the board
+   it slopes 1.4 m out and some 75 cm down, with a valance hanging at
+   its front edge. The bays are laid out as the facade shader lays
+   them (buildings.ts), so each awning hangs over its window; none
+   over the door. Striped in cream and a colour, by the shop. */
+const STRIPES: [number, number, number][] = [[0.42, 0.06, 0.04], [0.06, 0.2, 0.09], [0.07, 0.1, 0.25], [0.32, 0.22, 0.08], [0.4, 0.38, 0.33]];
+function awnings(b: Building, det: Details) {
+  const cloth = det.cloth!;
+  if (b.windows === false || (b.base ?? 0) > 0.5) return;
+  const seed = (parseInt(b.id.replace(/\D/g, '').slice(-6) || '0', 10) % 997) / 997;
+  const r = b.outer, n = r.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = r[2 * i]!, az = r[2 * i + 1]!, bx = r[2 * j]!, bz = r[2 * j + 1]!;
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+    if (L <= 4) continue;
+    const nx = dz / L, nz = -dx / L;
+    // the sunny side: facing south (+z) to west (−x)
+    if (!(nz > 0.3 || (nx < -0.6 && nz > -0.3))) continue;
+    if (det.exposed && !det.exposed(ax, az, bx, bz)) continue;
+    // not every shop: by the wall's own draw
+    const k = ((seed * 977 + i * 0.6180339) % 1 + 1) % 1;
+    if (k > 0.65) continue;
+    const stripe = STRIPES[Math.floor(k / 0.65 * STRIPES.length) % STRIPES.length]!;
+    const bay = 2.9 + 0.6 * seed, nb = Math.max(1, Math.floor(L / bay)), bw = L / nb;
+    const doorBay = nb >= 3 && L > 7 ? Math.floor(nb / 2) : -1;
+    const tx = dx / L, tz = dz / L;
+    const sw = Math.min(bw - 0.5, 2.6) + 0.4, out = 1.4, y0 = 0.6 + 2.72, y1 = y0 - 0.75, vh = 0.24;
+    for (let bi = 0; bi < nb; bi++) {
+      if (bi === doorBay) continue;
+      const uc = (bi + 0.5) * bw;
+      const P = (u: number, o: number, y: number) => [ax + tx * u + nx * o, y, az + tz * u + nz * o];
+      const quad = (q: number[][], nn: number[], uv: number[][]) => {
+        for (const kk of [0, 1, 2, 0, 2, 3]) {
+          cloth.pos.push(...q[kk]!); cloth.nrm.push(...nn); cloth.uv.push(...uv[kk]!); cloth.col.push(...stripe);
+        }
+      };
+      const sl = Math.hypot(out, y0 - y1);
+      const nn = [nx * (y0 - y1) / sl, out / sl, nz * (y0 - y1) / sl];
+      const u0 = uc - sw / 2, u1 = uc + sw / 2;
+      quad([P(u0, 0.02, y0), P(u1, 0.02, y0), P(u1, out, y1), P(u0, out, y1)], nn, [[0, 0], [sw, 0], [sw, sl], [0, sl]]);
+      // the valance, its v running on from the slope's
+      quad([P(u0, out, y1), P(u1, out, y1), P(u1, out, y1 - vh), P(u0, out, y1 - vh)], [nx, 0, nz], [[0, sl], [sw, sl], [sw, sl + vh], [0, sl + vh]]);
+    }
+  }
+}
+
+/* ── Eaves ─────────────────────────────────────────────────────────
+   Where a roof comes down to a wall, it does not stop at the wall's
+   face: the rafters run on some 40 cm (an estimate for the plastered
+   box eaves of the 18th and 19th century), the tiles with them at a
+   flatter pitch (the kick of the sprocket pieces), boxed in below by
+   a soffit and in front by a board under a half-round zinc gutter,
+   with downpipes at the ends of the house. Only along walls that are
+   eaves over their whole length and stand free: on a party wall the
+   neighbour's own eaves carry on. Corners between two such walls are
+   mitred; other ends are closed by a small end board. */
+const EAVE_O = 0.4, EAVE_F = 0.2, GUTTER_R = 0.075, PIPE_R = 0.05;
+function eaves(b: Building, r: Ring, rp: RoofPlan, walls: WallBuf, roofs: RoofBuf, det: Details) {
+  if (b.roof === 'flat' || rp.H <= 0.05 || (rp.mode === 'distance' && rp.profile !== 'hip')) return;
+  if (b.kind === 'colonnade' || b.kind === 'gate' || (b.base ?? 0) > 2) return;
+  const n = r.length / 2;
+  if (n < 3) return;
+  const f = (x: number, z: number) => rp.mode === 'planes' ? Math.max(0, envelope(rp.planes, x, z)) : 0;
+  const col = hexRGB(b.colour), roofCol = hexRGB(b.roofColour);
+  // per edge: is it a free eave, its outward normal, its kick (slope of the strip)
+  const E = Array.from({ length: n }, (_, i) => {
+    const j = (i + 1) % n;
+    const ax = r[2 * i]!, az = r[2 * i + 1]!, bx = r[2 * j]!, bz = r[2 * j + 1]!;
+    const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz);
+    const nx = L > 0 ? dz / L : 0, nz = L > 0 ? -dx / L : 0;
+    let ok = L > 1.2;
+    let slope = rp.k, plane: Plane | null = null;
+    if (ok && rp.mode === 'planes') {
+      for (const t of [0.02, 0.5, 0.98]) if (f(ax + dx * t, az + dz * t) > 0.05) ok = false;
+      const mx = ax + dx / 2 - nx * 0.4, mz = az + dz / 2 - nz * 0.4;
+      slope = f(mx, mz) / 0.4;
+      let m = Infinity;
+      for (const p of rp.planes) { const v = evalP(p, mx, mz); if (v < m) { m = v; plane = p; } }
+      if (slope < 0.15) ok = false;
+    }
+    const free = L > 0.05 && (!det.exposed || det.exposed(ax, az, bx, bz));
+    if (!free) ok = false;
+    return { ok, free, ax, az, bx, bz, dx, dz, L, nx, nz, kick: Math.min(slope, 0.85), plane };
+  });
+  // the outer line's end at the start or end vertex of edge i, at offset o:
+  // mitred with the neighbouring edge where that is a free eave too
+  const corner = (i: number, side: 'start' | 'end', o: number): [number, number, boolean] => {
+    const cur = E[i]!, other = E[side === 'start' ? (i + n - 1) % n : (i + 1) % n]!;
+    const vx = side === 'start' ? cur.ax : cur.bx, vz = side === 'start' ? cur.az : cur.bz;
+    const dot = cur.nx * other.nx + cur.nz * other.nz;
+    if (other.ok && 1 + dot > 0.3) {
+      const k = o / (1 + dot);
+      return [vx + (cur.nx + other.nx) * k, vz + (cur.nz + other.nz) * k, true];
+    }
+    return [vx + cur.nx * o, vz + cur.nz * o, false];
+  };
+  // a quad on the walls' buffer, wound to face nn
+  const wq = (P: number[][], nn: number[], uvs: number[][], fac: number[]) => {
+    const e1 = [0, 1, 2].map((c) => P[1]![c]! - P[0]![c]!), e2 = [0, 1, 2].map((c) => P[2]![c]! - P[0]![c]!);
+    const cr = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+    const order = cr[0]! * nn[0]! + cr[1]! * nn[1]! + cr[2]! * nn[2]! >= 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+    for (const k of order) {
+      walls.pos.push(...P[k]!); walls.nrm.push(...nn); walls.uv.push(...uvs[k]!);
+      walls.fac.push(...fac); walls.col.push(col[0], col[1], col[2]);
+    }
+  };
+  const blank = 1 + 128 * SRC_CODE[b.src];
+  const metal = det.metal;
+  const tube = (pts: number[][], R: number, sides: number, from = 0, to = Math.PI * 2) => {
+    // a tube (or a part of one, angles from..to round its axis; on a
+    // level axis 0..π is the lower half) through pts
+    if (!metal) return;
+    for (let s = 1; s < pts.length; s++) {
+      const p = pts[s - 1]!, q = pts[s]!;
+      const ax = [q[0]! - p[0]!, q[1]! - p[1]!, q[2]! - p[2]!], al = Math.hypot(ax[0]!, ax[1]!, ax[2]!);
+      if (al < 1e-4) continue;
+      const a = ax.map((v) => v / al);
+      const ref = Math.abs(a[1]!) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+      let u = [a[1]! * ref[2]! - a[2]! * ref[1]!, a[2]! * ref[0]! - a[0]! * ref[2]!, a[0]! * ref[1]! - a[1]! * ref[0]!];
+      const ul = Math.hypot(u[0]!, u[1]!, u[2]!); u = u.map((v) => v / ul);
+      const w = [a[1]! * u[2]! - a[2]! * u[1]!, a[2]! * u[0]! - a[0]! * u[2]!, a[0]! * u[1]! - a[1]! * u[0]!];
+      for (let k = 0; k < sides; k++) {
+        const t0 = from + (to - from) * k / sides, t1 = from + (to - from) * (k + 1) / sides;
+        const d0 = [0, 1, 2].map((c) => u[c]! * Math.cos(t0) + w[c]! * Math.sin(t0)), d1 = [0, 1, 2].map((c) => u[c]! * Math.cos(t1) + w[c]! * Math.sin(t1));
+        const v = (base: number[], d: number[]) => [base[0]! + d[0]! * R, base[1]! + d[1]! * R, base[2]! + d[2]! * R];
+        for (const [base, d] of [[p, d0], [q, d1], [q, d0], [p, d0], [p, d1], [q, d1]] as const) { metal.pos.push(...v(base, d)); metal.nrm.push(...d); }
+      }
+    }
+  };
+  const yb = b.base ?? 0;
+  for (let i = 0; i < n; i++) {
+    const e = E[i]!;
+    if (!e.ok) continue;
+    const yo = b.eave - e.kick * EAVE_O, yf = yo - EAVE_F;
+    const [sx, sz, sm] = corner(i, 'start', EAVE_O), [ex, ez, em] = corner(i, 'end', EAVE_O);
+    // the strip of tiles, continuing the roof's texture coordinates
+    const P = [[e.ax, b.eave, e.az], [e.bx, b.eave, e.bz], [ex, yo, ez], [sx, yo, sz]];
+    const sl = Math.hypot(1, e.kick), vo = -EAVE_O * sl;
+    let uvs: number[][];
+    if (e.plane) {
+      const pl = e.plane, gl = Math.hypot(pl[1], pl[2]);
+      const tx = -pl[2] / gl, tz = pl[1] / gl;
+      uvs = P.map(([x, , z], k) => [x! * tx + z! * tz, k < 2 ? 0 : vo]);
+    } else uvs = P.map(([x, , z], k) => [x! + z!, k < 2 ? 0 : vo]);
+    const rn = [e.nx * e.kick / sl, 1 / sl, e.nz * e.kick / sl];
+    pushTri(roofs, [...P[0]!, ...P[1]!, ...P[2]!], rn[0]!, rn[1]!, rn[2]!, [...uvs[0]!, ...uvs[1]!, ...uvs[2]!], roofCol);
+    pushTri(roofs, [...P[0]!, ...P[2]!, ...P[3]!], rn[0]!, rn[1]!, rn[2]!, [...uvs[0]!, ...uvs[2]!, ...uvs[3]!], roofCol);
+    // the board in front (drawn as cornice: its eave is its top) and the soffit under it
+    const fac = [yo, b.storey, e.L, blank];
+    const ue = (x: number, z: number) => ((x - e.ax) * e.dx + (z - e.az) * e.dz) / e.L;
+    const front = [[sx, yf, sz], [ex, yf, ez], [ex, yo, ez], [sx, yo, sz]];
+    wq(front, [e.nx, 0, e.nz], front.map(([x, y, z]) => [ue(x!, z!), y!]), fac);
+    const soffit = [[e.bx, yf, e.bz], [e.ax, yf, e.az], [sx, yf, sz], [ex, yf, ez]];
+    wq(soffit, [0, -1, 0], soffit.map(([x, , z]) => [ue(x!, z!), yf - (((x! - e.ax) * e.nx + (z! - e.az) * e.nz))]), [1000, b.storey, e.L, blank]);
+    // end boards where the eave does not turn a corner
+    const tx = e.dx / e.L, tz = e.dz / e.L;
+    if (!sm) {
+      const cap = [[e.ax, yf, e.az], [sx, yf, sz], [sx, yo, sz], [e.ax, b.eave, e.az]];
+      wq(cap, [-tx, 0, -tz], cap.map(([x, y, z]) => [(x! - e.ax) * e.nx + (z! - e.az) * e.nz, y!]), fac);
+    }
+    if (!em) {
+      const cap = [[ex, yf, ez], [e.bx, yf, e.bz], [e.bx, b.eave, e.bz], [ex, yo, ez]];
+      wq(cap, [tx, 0, tz], cap.map(([x, y, z]) => [(x! - e.ax) * e.nx + (z! - e.az) * e.nz, y!]), fac);
+    }
+    if (!metal) continue;
+    // the gutter: a half-round under the tiles' edge, open at the top
+    const [gsx, gsz] = corner(i, 'start', EAVE_O + GUTTER_R), [gex, gez] = corner(i, 'end', EAVE_O + GUTTER_R);
+    const gy = yo - GUTTER_R * 0.6;
+    tube([[gsx, gy, gsz], [gex, gy, gez]], GUTTER_R, 5, 0, Math.PI);
+    // downpipes: at the ends of the house (one per corner), and every 15 m or so on a long front
+    // (one at each corner; at a party wall the house to its left has it)
+    const at: number[] = [];
+    if (sm || E[(i + n - 1) % n]!.free) at.push(0.3);
+    if (!em) at.push(e.L - 0.3);
+    const mid = Math.floor(e.L / 15);
+    for (let k = 1; k <= mid; k++) at.push(e.L * k / (mid + 1));
+    for (const s of at) {
+      if (s < 0.25 || s > e.L - 0.25) continue;
+      const px = e.ax + tx * s, pz = e.az + tz * s;
+      const off = 0.06 + PIPE_R;
+      const g = [px + e.nx * (EAVE_O + GUTTER_R), gy - GUTTER_R * 0.5, pz + e.nz * (EAVE_O + GUTTER_R)];
+      const bend = [px + e.nx * off, gy - 0.6, pz + e.nz * off];
+      tube([g, [g[0]!, g[1]! - 0.15, g[2]!], bend, [bend[0]!, yb + 0.25, bend[2]!], [px + e.nx * (off + 0.18), yb + 0.06, pz + e.nz * (off + 0.18)]], PIPE_R, 5);
+    }
+  }
 }
 
 /* Chimneys: one per 9 m of ridge or so, on the ridge line a little to
@@ -473,9 +719,14 @@ function insideRing(r: Ring, x: number, z: number) {
   return cIn;
 }
 
-/* The roof's height above the eaves at a point, for tests and probes. */
-export function roofAt(b: Building, x: number, z: number) {
+/* The roof's height above the eaves at a point, for tests and probes;
+   roofFn plans the roof once for many points (city/skyview.ts). */
+export function roofFn(b: Building): (x: number, z: number) => number {
   const rp = roofPlanes(b);
-  if (rp.mode === 'planes') return Math.max(0, envelope(rp.planes, x, z));
-  return distanceLift(rp, boundaryDist([b.outer, ...(b.holes ?? [])], x, z));
+  if (rp.mode === 'planes') return (x, z) => Math.max(0, envelope(rp.planes, x, z));
+  const rings = [b.outer, ...(b.holes ?? [])];
+  return (x, z) => distanceLift(rp, boundaryDist(rings, x, z));
+}
+export function roofAt(b: Building, x: number, z: number) {
+  return roofFn(b)(x, z);
 }

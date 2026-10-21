@@ -18,7 +18,7 @@ export interface History {
   landmarks: Landmark[];
   // Open squares of the year that neither OSM nor OHM outline, as
   // local-metre rings; nothing is rebuilt on them.
-  squares: { name: string; ring: number[]; kind?: 'square' | 'park' }[];
+  squares: { name: string; ring: number[]; kind?: 'square' | 'park'; paving?: 'setts' }[];
   canalWidth: Record<string, number>;               // m between quay walls, by OHM name
   rename: Record<string, string>;                    // today's street name → the year's, where OHM has none
   // Quarters destroyed and rebuilt to a new plan after the year: an
@@ -33,6 +33,9 @@ export interface History {
   centre: [number, number, number];
   bells: { hours?: string; quarters?: string };
   mapCaption?: string;
+  // Lettering for the shopfronts' boards: the trades of the time, in its
+  // spelling, under made-up names (not the shops that were there).
+  signs?: string[];
   shopStreets: string[];                             // streets (names of the year) whose houses had shops below                             // parks of today that were parks in the year, by name                     // HUD text for named buildings that are not modelled landmarks
 }
 

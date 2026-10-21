@@ -47,7 +47,7 @@ export interface Building {
 }
 
 export type AreaKind = 'water' | 'park' | 'grass' | 'square' | 'garden' | 'yard' | 'sand' | 'cemetery' | 'rail' | 'wood';
-export interface Area { kind: AreaKind; outer: Ring; holes?: Ring[]; name?: string }
+export interface Area { kind: AreaKind; outer: Ring; holes?: Ring[]; name?: string; paving?: 'setts' }   // paving: a square laid with setts (else gravel)
 
 export type StreetKind = 'main' | 'street' | 'lane' | 'path' | 'bridge' | 'footbridge';
 export interface Street { kind: StreetKind; name?: string; w: number; pts: Ring; paving: 'cobble' | 'sett' | 'gravel' | 'earth' | 'plank'; busy?: true }
@@ -91,6 +91,7 @@ export interface City {
   water: number;                                    // the river's level, m (negative: below the streets)
   centre: [number, number, number];                 // x, z, radius of the busy middle of town
   bells: { hours?: string; quarters?: string };     // landmark names whose towers strike
+  signs?: string[];                                 // lettering for the shopfronts' boards
   map?: { file: string; caption: string };          // the historical map raster under data/<id>/
   credits: string[];
 }

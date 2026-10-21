@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { renderer } from '../render/renderer';
 import { bakeGroundTextures } from './groundtex';
 import { heightAt } from './terrain';
+import { GROUND_SKY_GLSL, type HeightField } from './skyview';
+import { SUN_DIR, bounce } from '../render/sky';
 import type { City, Ring } from './types';
 
 /* ── Ground ─────────────────────────────────────────────────────
@@ -32,15 +34,17 @@ import type { City, Ring } from './types';
 
 const RES = 2048;
 const SIDEWALK = 2.6;   // m each side of a street's carriageway
+const KERB = 0.14;      // the pavement's height over the carriageway, m (an estimate: granite kerbs of the time stood 12–16 cm)
 
 export type Surface = 'setts' | 'slabs' | 'grass' | 'gravel' | 'earth' | 'water' | 'rail';
 export interface Ground {
   mesh: THREE.Mesh;
   isWater(x: number, z: number): boolean;
   surface(x: number, z: number): Surface;
+  isGrass(x: number, z: number): boolean;     // surface() === 'grass', faster
 }
 
-export function buildGround(city: City): Ground {
+export function buildGround(city: City, hf: HeightField): Ground {
   const [x0, z0, x1, z1] = city.bounds;
   const W = x1 - x0, H = z1 - z0;
   const cA = document.createElement('canvas'), cB = document.createElement('canvas');
@@ -74,7 +78,7 @@ export function buildGround(city: City): Ground {
   };
 
   const AREA: Record<string, Paint> = { park: GRASS, grass: GRASS, cemetery: GRASS, garden: GRASS, square: GRAVEL, sand: GRAVEL, rail: RAIL, yard: EARTH };
-  for (const ar of city.areas) { const p = AREA[ar.kind]; if (p) fill([ar.outer, ...(ar.holes ?? [])], p); }
+  for (const ar of city.areas) { const p = ar.paving === 'setts' ? SETTS : AREA[ar.kind]; if (p) fill([ar.outer, ...(ar.holes ?? [])], p); }
   const roads = city.streets.filter((s) => s.kind !== 'path' && s.kind !== 'footbridge');
   const paths = city.streets.filter((s) => s.kind === 'path' || s.kind === 'footbridge');
   for (const s of paths) stroke(s.pts, s.w, GRAVEL);
@@ -100,6 +104,7 @@ export function buildGround(city: City): Ground {
   for (const bd of city.buildings) if ((bd.base ?? 0) < 2) ring(c, bd.outer);
   c.fill('nonzero');
   const tS = streetFrame(city, x0, z0, sx, sz);
+  const tV = groundSkyTexture(hf);
   const tex = bakeGroundTextures(renderer);
   const tA = new THREE.CanvasTexture(cA), tB = new THREE.CanvasTexture(cB), tC = new THREE.CanvasTexture(cC);
   for (const t of [tA, tB, tC]) {
@@ -143,7 +148,7 @@ export function buildGround(city: City): Ground {
   for (let i = 0; i < gp.count; i++) gp.setY(i, heightAt(gp.getX(i), gp.getZ(i)));
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
-  const uni = { tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR }, tS: { value: tS },
+  const uni = { tV: { value: tV }, uBounce: { value: bounce }, uSunDir: { value: SUN_DIR }, tA: { value: tA }, tB: { value: tB }, tC: { value: tC }, tR: { value: tR }, tS: { value: tS },
     tGA: { value: tex.albedo }, tGN: { value: tex.normal }, uSRes: { value: new THREE.Vector2(RES, RES) },
     uB: { value: new THREE.Vector4(x0, z0, W, H) }, uR: { value: new THREE.Vector4(r0, q0, RW, RH) } };
   mat.onBeforeCompile = (sh) => {
@@ -156,10 +161,20 @@ export function buildGround(city: City): Ground {
       .replace('#include <map_fragment>', GROUND_MAP)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = gRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(gNrm, 0.0)).xyz);')
+      // the sun's shadow where the ray really met the ground, and the kerb's own
+      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin
+        .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= gSunVis;')
+        .replace('vDirectionalShadowCoord[ i ] )', '(vDirectionalShadowCoord[ i ] + directionalShadowMatrix[ i ] * vec4(gHitOff, 0.0)) )'))
       // the relief's and the walls' occlusion dims the sky's light only, not the sun's
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= gAO;\nreflectedLight.indirectSpecular *= mix(1.0, gAO, 0.7);');
+      // the sky the town leaves open (skyview.ts); what it hides is
+      // the houses round about, lit by the sun and the sky
+      .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+        reflectedLight.indirectDiffuse = reflectedLight.indirectDiffuse * gSky + (1.0 - gSky) * uBounce * BRDF_Lambert(material.diffuseColor);
+        reflectedLight.indirectDiffuse *= gAO;
+        reflectedLight.indirectSpecular *= mix(1.0, gAO * gSky, 0.7);`);
   };
   mat.customProgramCacheKey = () => 'ground';
+  mat.userData.skyView = true;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';
@@ -167,6 +182,12 @@ export function buildGround(city: City): Ground {
   return {
     mesh,
     isWater(x, z) { const i = texel(x, z); return i >= 0 && dB[i]! > 127; },
+    isGrass(x, z) {
+      const i = texel(x, z);
+      if (i < 0 || dB[i]! > 127) return false;
+      const g = dA[i + 2]!;
+      return g > 100 && g >= dA[i]! && g >= dA[i + 1]! && g >= dB[i + 1]! && g >= dB[i + 2]!;
+    },
     surface(x, z) {
       const i = texel(x, z);
       if (i < 0) return 'earth';
@@ -181,7 +202,7 @@ export function buildGround(city: City): Ground {
 
 /* The street frame: R the signed distance to the nearest carriageway's
    edge (−4..4 m, negative on the carriageway), G that street's bearing
-   (0..π). Exact, from the street lines as capsules of the widths the
+   over π. Exact, from the street lines as capsules of the widths the
    carriageways are painted at, unlike a distance taken from the raster. */
 function streetFrame(city: City, x0: number, z0: number, sx: number, sz: number) {
   const D = new Float32Array(RES * RES).fill(4), TH = new Float32Array(RES * RES);
@@ -208,18 +229,52 @@ function streetFrame(city: City, x0: number, z0: number, sx: number, sz: number)
       }
     }
   }
-  const data = new Uint8Array(RES * RES * 4);
+  // half floats: an 8-bit distance (3 cm steps) made the kerb's edge ragged
+  const data = new Uint16Array(RES * RES * 2);
   for (let n = 0; n < RES * RES; n++) {
-    data[n * 4] = Math.round(Math.max(0, Math.min(1, (D[n]! + 4) / 8)) * 255);
-    data[n * 4 + 1] = Math.round(TH[n]! / Math.PI * 255) % 256;
+    data[n * 2] = THREE.DataUtils.toHalfFloat(Math.max(-4, Math.min(4, D[n]!)));
+    data[n * 2 + 1] = THREE.DataUtils.toHalfFloat(TH[n]! / Math.PI);
   }
-  const t = new THREE.DataTexture(data, RES, RES, THREE.RGBAFormat, THREE.UnsignedByteType);
+  const t = new THREE.DataTexture(data, RES, RES, THREE.RGFormat, THREE.HalfFloatType);
   t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
   t.needsUpdate = true;
   return t;
 }
 
+/* The ground's open sky (city/skyview.ts), drawn on the GPU from the
+   height field, two metres a texel over the same bounds. */
+function groundSkyTexture(hf: HeightField) {
+  const tH = new THREE.DataTexture(hf.h as Float32Array<ArrayBuffer>, hf.nx, hf.nz, THREE.RedFormat, THREE.FloatType);
+  tH.minFilter = tH.magFilter = THREE.NearestFilter;
+  tH.needsUpdate = true;
+  const W = hf.nx * hf.cell, H = hf.nz * hf.cell;
+  const rt = new THREE.WebGLRenderTarget(Math.ceil(W / 2), Math.ceil(H / 2), { depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { tH: { value: tH }, uF: { value: new THREE.Vector4(hf.x0, hf.z0, W, H) } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: GROUND_SKY_GLSL, depthTest: false, depthWrite: false,
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  quad.frustumCulled = false;
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(rt);
+  renderer.render(quad, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+  renderer.setRenderTarget(prev);
+  mat.dispose(); quad.geometry.dispose(); tH.dispose();
+  return rt.texture;
+}
+
 const GROUND_PARS = /* glsl */ `
+uniform sampler2D tV;
+uniform vec3 uBounce, uSunDir;
+float gSky = 1.0;
+// the raised pavement: where the eye ray really meets the ground, and
+// how much of the sun the kerb's step lets through there
+vec3 gHitOff = vec3(0.0);
+float gSunVis = 1.0;
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ];
+#endif
 uniform sampler2D tA, tB, tC, tR, tS;
 uniform highp sampler2DArray tGA, tGN;
 uniform vec4 uB, uR;
@@ -250,7 +305,42 @@ void gAdd(float w, float L, vec2 tc, vec2 dx, vec2 dy, vec2 ex, vec2 ey) {
 `;
 
 const GROUND_MAP = /* glsl */ `
-  vec2 p = vW.xz;
+  /* The pavement stands a kerb's height above the carriageway (the
+     street frame's distance > 0), but the mesh is level: follow the eye
+     ray from the pavement's plane down to where it meets the step, the
+     kerb's face, or the road. */
+  const float KERB = ${KERB.toFixed(2)};
+  vec3 hit = vW;
+  float kFace = 0.0;
+  {
+    vec2 t0 = (vW.xz - uB.xy) / uB.zw;
+    vec3 V = vW - cameraPosition;
+    if (all(greaterThan(t0, vec2(0.0))) && all(lessThan(t0, vec2(1.0))) && cameraPosition.y > vW.y + KERB && length(V) < 150.0) {
+      // where the ray crosses the pavement's plane: on the pavement, that is the hit
+      float t = (cameraPosition.y - vW.y - KERB) / (cameraPosition.y - vW.y);
+      vec3 Q = cameraPosition + V * t;
+      float ka = texture2D(tS, (Q.xz - uB.xy) / uB.zw).r;
+      if (ka > 0.0) hit = Q;
+      else {
+        // over the road there; if the mesh's point is on the pavement the
+        // ray met the kerb's face in between: find it (the distance is
+        // nearly linear along so short a stretch, so a few secant steps)
+        float kb = texture2D(tS, (vW.xz - uB.xy) / uB.zw).r;
+        if (kb > 0.0) {
+          float ta = t, tb = 1.0, tm = t;
+          for (int i = 0; i < 4; i++) {
+            tm = ta + (tb - ta) * (-ka) / max(kb - ka, 1e-5);
+            float km = texture2D(tS, ((cameraPosition + V * tm).xz - uB.xy) / uB.zw).r;
+            if (km > 0.0) { tb = tm; kb = km; } else { ta = tm; ka = km; }
+          }
+          hit = cameraPosition + V * tm;
+          kFace = 1.0;
+        }
+      }
+    }
+  }
+  gHitOff = hit - vW;
+  vec2 p = hit.xz;
   vec2 tuv = (p - uB.xy) / uB.zw;
   // Wobble the lookup a little so edges between surfaces are not
   // the raster's straight lines.
@@ -274,7 +364,7 @@ const GROUND_MAP = /* glsl */ `
   float kd = 4.0, th = 0.0;
   vec2 kg = vec2(0.0, 1.0);
   if (inside) {
-    kd = texture2D(tS, tuv).r * 8.0 - 4.0;
+    kd = texture2D(tS, tuv).r;
     vec2 e = 0.5 / uSRes;
     kg = vec2(texture2D(tS, tuv + vec2(e.x, 0.0)).r - texture2D(tS, tuv - vec2(e.x, 0.0)).r,
               texture2D(tS, tuv + vec2(0.0, e.y)).r - texture2D(tS, tuv - vec2(0.0, e.y)).r) / (2.0 * e * uB.zw);
@@ -285,7 +375,8 @@ const GROUND_MAP = /* glsl */ `
   }
   vec2 al = vec2(cos(th), sin(th)), ac = vec2(-al.y, al.x);
   vec2 q = vec2(dot(p, ac), dot(p, al));
-  vec2 pdx = dFdx(p), pdy = dFdy(p);
+  // (texture gradients from the mesh's own position: the hit's jump at the kerb's edges)
+  vec2 pdx = dFdx(vW.xz), pdy = dFdy(vW.xz);
   vec2 qdx = vec2(dot(pdx, ac), dot(pdx, al)), qdy = vec2(dot(pdy, ac), dot(pdy, al));
   float kdx = dFdx(kd), kdy = dFdy(kd);
   float kaa = clamp(length(vec2(kdx, kdy)), 0.004, 0.3);
@@ -297,14 +388,17 @@ const GROUND_MAP = /* glsl */ `
   wL += upTo; wE -= upTo;
   // Paved ground: the raster says where, the frame says which side of
   // the kerb (the raster's edge is a metre coarse).
-  float paved = wS + wL;
+  // A square laid with setts: the raster's setts well beyond any kerb
+  // (on a street's own carriageway the frame's distance is negative)
+  float sq = wS * smoothstep(0.8, 1.4, kd);
+  float paved = wS + wL - sq;
   float road = paved * (1.0 - smoothstep(-kaa, kaa, kd));
   float walk = paved - road;
-  // on the road: the kerb's face (seen from above, a strip), the gutter
-  // (setts laid along the kerb), and the setts in rows across
-  float face = road * smoothstep(-0.13 - kaa, -0.13 + kaa, kd);
-  float gut = road * smoothstep(-0.5 - kaa, -0.5 + kaa, kd) - face;
-  float setts = road - face - gut;
+  // on the road: the gutter (setts laid along the kerb), and the setts
+  // in rows across
+  float face = 0.0;
+  float gut = road * smoothstep(-0.5 - kaa, -0.5 + kaa, kd);
+  float setts = road - gut + sq;
   // on the pavement: kerbstones, mosaic, a band of slabs, mosaic again
   float kerb = walk * (1.0 - smoothstep(0.3 - kaa, 0.3 + kaa, kd));
   float band = walk * smoothstep(0.65 - kaa, 0.65 + kaa, kd) * (1.0 - smoothstep(1.95 - kaa, 1.95 + kaa, kd));
@@ -327,11 +421,36 @@ const GROUND_MAP = /* glsl */ `
   float gRough = gAcc.a / wsum;
   vec3 nW = gNAcc.xyz / wsum;
   float ao = gNAcc.w / wsum;
+  // moss and weeds in the joints, where feet and wheels do not come:
+  // in the gutter, along the house fronts, at the foot of walls
+  {
+    float joint = smoothstep(0.78, 0.5, ao);
+    float quiet = max(road * (1.0 - smoothstep(0.0, 0.7, -kd)), texture2D(tC, tuv).r * (1.0 - road));
+    float weed = joint * quiet * smoothstep(0.45, 0.75, gF(p * 1.7 + 4.0));
+    col = mix(col, mix(vec3(0.035, 0.055, 0.015), vec3(0.07, 0.08, 0.03), gN(p * 40.0)), weed * 0.75);
+  }
 
-  // the kerb's face: dressed granite turned toward the road
-  if (face > 0.01) {
-    nW = normalize(mix(nW, vec3(-kg.x, 0.3, -kg.y), face));
-    col *= mix(1.0, 0.8, face);
+  // the kerb's face: dressed granite turned toward the road, splashed
+  // with the street's dirt toward its foot
+  float fh = hit.y - vW.y;
+  if (kFace > 0.5) {
+    vec4 fa = textureGrad(tGA, vec3(0.5 + fh / 1.3, q.y / 4.8, 1.0), qdx.yy / 4.8, qdy.yy / 4.8);
+    col = fa.rgb * mix(0.65, 1.0, smoothstep(0.0, 0.1, fh));
+    gRough = fa.a;
+    nW = vec3(-kg.x, 0.0, -kg.y);
+    ao = 0.9;
+    road = 0.0; walk = 0.0; setts = 0.0; gut = 0.0;
+  }
+  // the step shades the gutter: from the sky, and from the sun when it
+  // stands low behind the kerb
+  ao *= 1.0 - 0.4 * road * (1.0 - smoothstep(0.0, 0.35, -kd));
+  {
+    vec3 L = normalize(uSunDir);
+    float lh = length(L.xz), cosA = lh > 1e-3 ? dot(L.xz / lh, kg) : 0.0;
+    if (road > 0.5 && cosA > 0.0 && L.y > 0.0) {
+      float hc = -kd / cosA * L.y / lh;
+      gSunVis = smoothstep(KERB - 0.015, KERB + 0.015, hc);
+    }
   }
   // ballast is dark with soot and oil
   col *= mix(1.0, 0.5, wR);
@@ -345,8 +464,39 @@ const GROUND_MAP = /* glsl */ `
   float wet = gut * smoothstep(0.62, 0.8, gF(p * vec2(0.15, 0.15) + 5.0));
   col *= 1.0 - 0.45 * wet;
   gRough = mix(gRough, 0.12, wet);
+  // What the horses leave: droppings here and there on the carriageway,
+  // most where they walk, in the middle; trodden flat and drying, with
+  // a stain round each and straw in it. (The streets were swept, so few.)
+  if (road > 0.5) {
+    vec2 cp = p / 1.9, ci = floor(cp), cf = fract(cp);
+    if (gH(ci + 41.0) < 0.025 + 0.06 * mid) {
+      vec2 c0 = vec2(gH(ci + 3.0), gH(ci + 5.0)) * 0.6 + 0.2;
+      float r = 0.08 + 0.08 * gH(ci + 9.0);
+      vec2 dv = (cf - c0) * 1.9;
+      float d = length(dv * vec2(1.0, 0.8)) - r * (0.7 + 0.6 * gN(p * 26.0 + ci));
+      float blob = 1.0 - smoothstep(-0.008, 0.008, d);
+      float halo = (1.0 - smoothstep(0.0, 0.25, d)) * (1.0 - blob);
+      col = mix(col, col * vec3(0.8, 0.74, 0.62), halo * 0.6);
+      vec3 dung = mix(vec3(0.055, 0.042, 0.022), vec3(0.15, 0.12, 0.06), gH(ci + 13.0)) * (0.7 + 0.5 * gN(p * 60.0));
+      col = mix(col, dung, blob);
+      // bits of straw
+      float straw = step(0.86, gN(p * vec2(55.0, 9.0) + ci * 3.0)) * (blob + halo * 0.4);
+      col = mix(col, vec3(0.3, 0.24, 0.12), straw * 0.5);
+      gRough = mix(gRough, 0.75, blob);
+      nW = normalize(mix(nW, vec3(0.0, 1.0, 0.0), blob * 0.7));
+    }
+  }
   // paving everywhere picks up a little grime at a larger scale
   col *= 0.88 + 0.24 * gF(p * 0.06 + 1.7);
+  // lawns and verges are no carpet: drier, yellower patches, lusher
+  // darker ones, worn ones by the paths
+  float gw = wG / max(wsum, 1e-3);
+  if (gw > 0.01) {
+    float dry = smoothstep(0.4, 0.75, gF(p * 0.18 + 21.0)), lush = smoothstep(0.55, 0.8, gF(p * 0.4 + 2.0));
+    vec3 g2c = mix(col, col * vec3(1.6, 1.25, 0.75), dry * 0.7);
+    g2c = mix(g2c, g2c * vec3(0.75, 0.85, 0.8), lush * 0.6);
+    col = mix(col, mix(g2c, vec3(dot(g2c, vec3(0.33))), 0.15), gw);
+  }
   // forest floor beyond the town: dark, needles and shade
   col = mix(col, mix(vec3(0.03, 0.045, 0.02), vec3(0.06, 0.07, 0.03), gF(p * 0.3)), wood);
   // fields beyond the town: hay-coloured, in strips
@@ -354,7 +504,9 @@ const GROUND_MAP = /* glsl */ `
   // beside walls the sky is half hidden (the post pass's occlusion
   // adds the close detail): the sky's light only
   float occ = texture2D(tC, tuv).r;
-  gAO = ao * (1.0 - 0.35 * occ);
+  gAO = ao * (1.0 - 0.2 * occ);
+  // and the sky the houses round about leave open
+  if (inside) gSky = texture2D(tV, tuv).r;
   // the relief on the hills: tilt by the ground's own slope
   vec3 geo = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
   gNrm = normalize(nW + vec3(geo.x, 0.0, geo.z));

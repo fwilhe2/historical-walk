@@ -36,14 +36,20 @@ three r160, Bun), rebuilt small for a town instead of a planet.
   Jäger gates, the Dampfmaschinenhaus, the orphanage's Monopteros.
   Baroque facades get pilasters,
   the Dutch Quarter its bell gables in red brick, the shopping streets
-  their shopfronts, the houses dormers and chimneys.
+  their shopfronts with painted boards and striped awnings, the houses
+  dormers and chimneys, eaves that overhang, zinc gutters and
+  downpipes, steps before their doors.
 - **The Stadtkanal** open again, with railings and bridges; the Havel
   with quays and bridge parapets; the excise wall that still closed the
   town; the Ringer- and Havelkolonnade.
-- **The horse tram** on its three lines of 1900, horse cabs, barges and
-  a paddle steamer on the Havel, **people** on the pavements — townsfolk
-  and soldiers of the garrison — gas lanterns that light at dusk,
-  advertising columns and pumps at the crossings.
+- **The streets**: granite setts, raised pavements behind kerbstones,
+  the horse tram's rails, what the horses leave; gas lanterns that
+  light at dusk, advertising columns and pumps at the crossings; barges
+  and a paddle steamer on the Havel. The streets are empty: figures
+  and horses that do not look real were taken out (cabs are still
+  heard now and then from streets nearby).
+- **Trees** grown limb by limb, with leaves at their size, swaying in
+  the wind.
 - **The land round the town**: the Havel lakes, woods and the royal
   gardens, and the hills (the Brauhausberg across the river).
 - **Time** runs at the clock's pace; the sun follows Potsdam's latitude,
@@ -54,6 +60,10 @@ three r160, Bun), rebuilt small for a town instead of a planet.
   from it, from noon to the blue hour; cumulus drift on the wind. The
   frame is rendered in HDR and exposed like a camera's, with ambient
   occlusion, bloom and AgX tone mapping; the water mirrors the town.
+  In the streets the houses opposite hide part of the sky, so walls
+  and pavements get less of its light, low down most, and some of the
+  sunlit fronts' instead; the exposure eases toward the scene's
+  brightness as an eye does.
 
 ## Where the city comes from
 
@@ -122,12 +132,18 @@ landmarks, with sources and with every estimated number marked as such.
   plinth, the shadows these throw in the sun, rooms and curtains behind
   the glass, weathering) from each wall's length and storey height, not
   from the real elevations; roofs follow the footprint's rectangle (or
-  rise from every eave on irregular footprints).
-- Trees are today's trees from OSM.
-- The ground is level; the Havel and the canal lie 1.6 m below it.
+  rise from every eave on irregular footprints). The shop boards'
+  lettering is the trades of the time under made-up names, placed by
+  chance — not the shops that were there.
+- Trees are today's trees from OSM, grown from a few seeds.
+- The ground is level; the Havel and the canal lie 1.6 m below it. The
+  pavements' 14 cm over the carriageway are traced in the ground's
+  shader, not built: things standing on them stand on the road's level.
 - Street paving is the same everywhere: granite setts in rows across
   the carriageway with a gutter and kerbstones, and on the pavements a
   band of granite slabs between strips of mosaic, up to the houses.
+- How much sky a wall or the ground sees counts the town's roofs only
+  (not trees, not the hills).
 - The water's reflections are found on screen: what is out of view is
   not mirrored (the sky stands in for it).
 - Shadows reach some 250 m ahead of you; beyond, the haze and the walls'

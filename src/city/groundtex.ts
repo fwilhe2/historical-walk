@@ -98,11 +98,13 @@ G setts(vec2 x) {
   float dome = smoothstep(joint, joint + 0.05, e) * (1.0 - 0.6 * dot(lc, lc));
   float tilt = dot(lc, hash2(sid + 9.0) - 0.5) * 0.35;
   float sand = fbm(x, 192.0, 3);
-  float hs = 0.5 + 0.38 * dome + tilt * 0.25 + (vnoise(x, 300.0) - 0.5) * 0.04;
+  float hs = 0.5 + 0.38 * dome + tilt * 0.25 + (vnoise(x, 300.0) - 0.5) * 0.04 + (hash(sid + 8.8) - 0.5) * 0.18;
   float hj = 0.12 + 0.12 * sand;
   float t = hash(sid + 1.3);
-  vec3 base = t < 0.45 ? vec3(0.19, 0.185, 0.178) : t < 0.65 ? vec3(0.205, 0.182, 0.168) : t < 0.88 ? vec3(0.16, 0.165, 0.172) : vec3(0.1, 0.097, 0.094);
-  base *= 0.82 + 0.3 * hash(sid + 5.5);
+  // grey granite of a few quarries: light grey, pinkish, blue-grey, a
+  // few dark; each stone its own shade, and a few sunk or proud
+  vec3 base = t < 0.4 ? vec3(0.17, 0.166, 0.16) : t < 0.6 ? vec3(0.19, 0.162, 0.148) : t < 0.84 ? vec3(0.14, 0.145, 0.153) : vec3(0.085, 0.083, 0.08);
+  base *= 0.72 + 0.4 * hash(sid + 5.5);
   vec3 c = granite(x, base, vec2(700.0));
   float top = smoothstep(0.03, 0.07, e);
   c = mix(c, c * vec3(0.86, 0.82, 0.78), top * 0.45);          // worn, a little greasy, on top
@@ -134,11 +136,14 @@ G slabs(vec2 x) {
   vec2 lc = vec2(m.x / T.x - 0.5, (m.y - 0.5 * (b0 + b1)) / (b1 - b0));
   float tilt = dot(lc, hash2(sid + 4.0) - 0.5) * 0.5;
   float t = hash(sid + 2.0);
-  vec3 base = mix(vec3(0.30, 0.295, 0.28), vec3(0.26, 0.25, 0.245), t);
+  vec3 base = mix(vec3(0.24, 0.236, 0.226), vec3(0.2, 0.196, 0.19), t);
   vec3 c = granite(x, base, vec2(500.0, 1850.0));
-  // stains and wear: footsteps polish the middle, the edges keep dirt
+  // stains and wear: footsteps polish the middle, the edges keep dirt,
+  // and some slabs carry old dark blotches (oil, soot, what was spilt)
   float st = fbm(x + hash(sid), vec2(6.0, 22.0), 5);
-  c *= 0.82 + 0.3 * st;
+  c *= 0.78 + 0.36 * st;
+  float blot = smoothstep(0.62, 0.7, fbm(x * 1.3 + hash(sid + 1.0) * 3.0, vec2(4.0, 14.0), 4));
+  c *= 1.0 - 0.3 * blot;
   c *= mix(0.7, 1.0, smoothstep(0.004, 0.03, e));
   G g;
   g.a = mix(vec3(0.07, 0.065, 0.055), c, inside);

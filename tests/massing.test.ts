@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMassing, roofAt, roofBuf, wallBuf } from '../src/city/massing';
+import { buildMassing, metalBuf, roofAt, roofBuf, wallBuf } from '../src/city/massing';
 import type { Building } from '../src/city/types';
 
 const rect = (w: number, d: number): number[] => [0, 0, w, 0, w, d, 0, d];
@@ -87,10 +87,45 @@ describe('dormers', () => {
   it('leave churches, palaces and flat roofs alone', () => {
     for (const over of [{ kind: 'church' as const }, { kind: 'palace' as const }, { roof: 'flat' as const }]) {
       const b = house(over);
-      const a = wallBuf(), c = wallBuf();
+      const a = wallBuf();
       buildMassing(b, a, roofBuf());
-      buildMassing(b, c, roofBuf(), false);
-      expect(a.pos.length).toBe(c.pos.length);
+      // dormer walls carry style 4 in their flags (32)
+      const dormerWalls = a.fac.filter((v, i) => i % 4 === 3 && Math.floor(Math.floor(v) % 128 / 8) % 8 === 4);
+      expect(dormerWalls.length).toBe(0);
     }
+  });
+});
+
+describe('eaves', () => {
+  const rows = (r: { pos: number[] }, from: number) => {
+    const out: number[][] = [];
+    for (let i = from; i < r.pos.length; i += 3) out.push(r.pos.slice(i, i + 3));
+    return out;
+  };
+  it('overhang the long sides of a gabled house, not its gables, with gutters and downpipes', () => {
+    const b = house();
+    const r0 = roofBuf();
+    buildMassing(b, wallBuf(), r0, false);
+    const r = roofBuf(), m = metalBuf();
+    buildMassing(b, wallBuf(), r, true, { metal: m });
+    const strip = rows(r, r0.pos.length).filter((p) => p[1]! <= b.eave + 1e-6);
+    expect(strip.length).toBeGreaterThan(0);
+    const zs = strip.map((p) => p[2]!);
+    // out beyond both long walls (z = 0 and z = 10), sloping down and away
+    expect(Math.min(...zs)).toBeCloseTo(-0.4, 5);
+    expect(Math.max(...zs)).toBeCloseTo(10.4, 5);
+    for (const p of strip) expect(p[0]!).toBeGreaterThanOrEqual(-1e-6), expect(p[0]!).toBeLessThanOrEqual(20 + 1e-6);
+    // metalwork reaches down to the ground
+    expect(Math.min(...rows(m, 0).map((p) => p[1]!))).toBeLessThan(0.2);
+  });
+  it('stop at a party wall', () => {
+    const b = house();
+    const r0 = roofBuf(), r = roofBuf();
+    buildMassing(b, wallBuf(), r0, false);
+    // a neighbour stands against the long side at z = 0
+    buildMassing(b, wallBuf(), r, true, { exposed: (_ax, az, _bx, bz) => !(Math.abs(az) < 1e-6 && Math.abs(bz) < 1e-6) });
+    const zs = rows(r, r0.pos.length).map((p) => p[2]!);
+    expect(Math.min(...zs)).toBeGreaterThanOrEqual(-1e-6);
+    expect(Math.max(...zs)).toBeCloseTo(10.4, 5);
   });
 });

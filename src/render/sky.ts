@@ -115,6 +115,13 @@ export const light = {
   sun: new THREE.Vector3(), sky: new THREE.Vector3(), ground: 1,
   exposure: 1,
 };
+/* What the houses round about give back, where they hide the sky
+   (city/skyview.ts): the irradiance on the fronts and roofs that
+   stand in the way, times their albedo. A share of them is in the
+   sun (an estimate; it depends on the street), all see about half the
+   sky; plaster and brick reflect about 40 %, warmer than grey. */
+export const bounce = new THREE.Vector3();
+const BOUNCE_TINT = [1.06, 0.97, 0.82];
 
 /* Stars for the night: points on a far sphere, fading in as the sky
    darkens below civil twilight. */
@@ -179,6 +186,8 @@ function refresh(alt: number, eyeH: number) {
   light.sun.set(...(l.sun as RGB));
   light.sky.set(...(l.sky as RGB));
   light.ground = l.ground[1];
+  const up = Math.max(0, Math.sin(alt));
+  bounce.set(...([0, 1, 2].map((c) => 0.4 * BOUNCE_TINT[c]! * (l.sun[c]! * (0.12 + 0.1 * up) + l.sky[c]! * 0.5)) as RGB));
   light.exposure = EXP_DAY * Math.min(14, Math.pow(E_DAY / Math.max(1e-6, l.ground[1]), 0.55));
   const peak = Math.max(l.sun[0], l.sun[1], l.sun[2]);
   sun.intensity = peak;

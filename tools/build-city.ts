@@ -276,7 +276,7 @@ function addAreas(fs: Feature[], hist1900: boolean) {
 // Modern areas (water and green) first, then what OHM says of 1900 on top.
 addAreas(osm.feats.filter((f) => areaKind(f.tags) === 'water'), false);
 addAreas(ohm.feats, true);
-for (const sq of hist.squares) areas.push({ kind: sq.kind ?? 'square', outer: orient(sq.ring, true), name: sq.name });
+for (const sq of hist.squares) areas.push({ kind: sq.kind ?? 'square', outer: orient(sq.ring, true), name: sq.name, ...(sq.paving ? { paving: sq.paving } : {}) });
 // The 1903 map's built blocks inside the town: what is not building in them is yard,
 // packed earth and paving; everything else unbuilt is garden (the
 // ground's default). Yards go first, so parks and squares paint over.
@@ -898,6 +898,7 @@ const city: City = {
   water: hist.water,
   centre: hist.centre,
   bells: hist.bells,
+  ...(hist.signs ? { signs: hist.signs } : {}),
   ...(spec.map ? { map: { file: spec.map.file, caption: hist.mapCaption ?? '' } } : {}),
   credits: hist.credits,
 };

@@ -3,151 +3,20 @@ import earcut from 'earcut';
 import { heightAt } from './terrain';
 import type { City } from './types';
 
-/* ── Trees and walls ────────────────────────────────────────────
-   Trees: one instanced trunk and one instanced crown, a lumpy
-   icosphere (linden and chestnut were the avenue trees of Potsdam),
-   sized per tree from the data. Walls: the excise wall of 1733,
-   which still closed the town in 1900 (it came down 1900–1905), and
-   garden walls, as plastered boxes along their lines with a coping. */
-
-/* A spray of leaves on a transparent canvas: the texture every leaf
-   card of every crown shares. A card is a couple of metres across, so
-   a linden's leaf (8–10 cm) is a few per cent of it: some 2500 small
-   leaves on twigs, in the greens of a tree in summer, darker and
-   lighter, a few yellowing. Lindens and chestnuts at 50 m read as a
-   mass of small leaves with sky through it, which is what this is. */
-function leafTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 1024;
-  const g = c.getContext('2d')!;
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  g.strokeStyle = 'rgba(60,48,36,0.9)'; g.lineWidth = 4;
-  for (let k = 0; k < 9; k++) { g.beginPath(); g.moveTo(512, 1010); g.quadraticCurveTo(300 + rnd() * 424, 600, 80 + rnd() * 864, 60 + rnd() * 600); g.stroke(); }
-  for (let i = 0; i < 2600; i++) {
-    const x = 40 + rnd() * 944, y = 30 + rnd() * 900;
-    const dx = x - 512, dy = y - 480;
-    if (dx * dx / 1.15 + dy * dy > 470 * 470) continue;   // a rounded spray
-    const l = 0.4 + rnd() * 0.6, yel = rnd() < 0.06 ? 1 : 0;
-    const r = Math.round(38 * l + 18 + yel * 60), gg = Math.round(62 * l + 32 + yel * 40), b = Math.round(20 * l + 10);
-    g.fillStyle = `rgb(${r},${gg},${b})`;
-    g.save(); g.translate(x, y); g.rotate(rnd() * Math.PI * 2);
-    const w = 11 + rnd() * 6, h = 8 + rnd() * 4;
-    // a heart-shaped leaf with a pointed tip, lighter on one half
-    g.beginPath(); g.moveTo(-w, 0); g.quadraticCurveTo(-w * 0.2, -h * 1.3, w, 0); g.quadraticCurveTo(-w * 0.2, h * 1.3, -w, 0); g.fill();
-    g.fillStyle = `rgba(255,255,220,${0.05 + rnd() * 0.08})`;
-    g.beginPath(); g.moveTo(-w, 0); g.quadraticCurveTo(-w * 0.2, -h * 1.3, w, 0); g.closePath(); g.fill();
-    g.restore();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-}
-
-/* One crown: leaf cards scattered through a unit ellipsoid, turned
-   every way, with normals pointing out from the crown's centre so the
-   whole crown shades like one soft volume (lit side, shaded side)
-   rather than as a heap of flat cards. Cards deep inside and under the
-   crown see less sky: a vertex colour darkens them. */
-function crownGeometry() {
-  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], col: number[] = [];
-  let seed = 11;
-  const rnd = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
-  const v = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), n = new THREE.Vector3();
-  for (let i = 0; i < 72; i++) {
-    // a point in the ellipsoid, biased outward
-    do { v.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (v.lengthSq() > 1);
-    v.multiplyScalar(0.55 + 0.45 * Math.cbrt(v.length()) / Math.max(v.length(), 1e-3) * v.length());
-    a.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
-    b.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).cross(a).normalize();
-    const s = 0.38 + rnd() * 0.22;
-    const ao = 0.35 + 0.65 * THREE.MathUtils.smoothstep(v.length() * 0.8 + v.y * 0.35, 0.1, 1.0);
-    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
-    const P = corners.map(([p, q]) => v.clone().addScaledVector(a, p * s).addScaledVector(b, q * s));
-    for (const k of [0, 1, 2, 0, 2, 3]) {
-      const p = P[k]!;
-      pos.push(p.x, p.y, p.z);
-      n.copy(p).normalize();
-      nrm.push(n.x, n.y, n.z);
-      uv.push((corners[k]![0] + 1) / 2, (corners[k]![1] + 1) / 2);
-      col.push(ao, ao, ao);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  return g;
-}
-
-// A trunk that forks into three limbs, reaching into the crown.
-function trunkGeometry() {
-  const parts = [new THREE.CylinderGeometry(0.11, 0.17, 1, 7).translate(0, 0.5, 0)];
-  for (let k = 0; k < 3; k++) {
-    const limb = new THREE.CylinderGeometry(0.035, 0.09, 0.75, 5).translate(0, 0.375, 0);
-    limb.rotateZ(0.55); limb.rotateY(k * 2.1 + 0.4); limb.translate(0, 0.92, 0);
-    parts.push(limb);
-  }
-  const pos: number[] = [], nrm: number[] = [];
-  for (const p of parts) {
-    const q = p.index ? p.toNonIndexed() : p;
-    pos.push(...q.attributes.position!.array); nrm.push(...q.attributes.normal!.array);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  return g;
-}
-
-export function buildTrees(city: City) {
-  const group = new THREE.Group();
-  group.name = 'trees';
-  const n = city.trees.length;
-  if (!n) return group;
-  const trunk = new THREE.InstancedMesh(trunkGeometry(), new THREE.MeshStandardMaterial({ color: 0x3f342b, roughness: 0.95 }), n);
-  const leaves = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.45, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.75, vertexColors: true });
-  // Leaves let light through: lit from behind they glow yellow-green,
-  // and the shaded side of a crown still gets some of the sun.
-  leaves.onBeforeCompile = (sh) => {
-    const L = THREE.ShaderChunk.lights_fragment_begin;
-    const i = L.indexOf('RE_Direct(', L.indexOf('getDirectionalLightInfo( directionalLight, directLight );'));
-    sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', L.slice(0, i) + `
-		reflectedLight.directDiffuse += directLight.color * diffuseColor.rgb * vec3(1.15, 1.3, 0.55)
-			* ( 0.22 * max( 0.0, -dot( geometryNormal, directLight.direction ) ) + 0.5 * pow( max( 0.0, -dot( geometryViewDir, directLight.direction ) ), 6.0 ) );
-		` + L.slice(i));
-  };
-  leaves.customProgramCacheKey = () => 'leaves';
-  const crown = new THREE.InstancedMesh(crownGeometry(), leaves, n);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), t = new THREE.Vector3();
-  const col = new THREE.Color();
-  city.trees.forEach((tr, i) => {
-    const trunkH = tr.h * 0.42;
-    q.setFromAxisAngle(t.set(0, 1, 0), (i * 2.399) % (Math.PI * 2));
-    const gy = heightAt(tr.x, tr.z);
-    m.compose(t.set(tr.x, gy, tr.z), q, s.set(1 + tr.r * 0.08, trunkH, 1 + tr.r * 0.08));
-    trunk.setMatrixAt(i, m);
-    m.compose(t.set(tr.x, gy + trunkH + (tr.h - trunkH) * 0.45, tr.z), q, s.set(tr.r, (tr.h - trunkH) * 0.55, tr.r));
-    crown.setMatrixAt(i, m);
-    // each tree its own green: some bluer, some yellower, some darker
-    const k = (i * 0.618) % 1, d = (i * 0.377) % 1;
-    crown.setColorAt(i, col.setRGB((0.8 + 0.25 * k) * (0.8 + 0.25 * d), (0.85 + 0.15 * k) * (0.8 + 0.25 * d), (0.75 + 0.3 * (1 - k)) * (0.8 + 0.25 * d)));
-  });
-  trunk.castShadow = crown.castShadow = true;
-  crown.receiveShadow = true;
-  group.add(trunk, crown);
-  return group;
-}
+/* ── Walls and street furniture ───────────────────────────────────
+   Walls: the town's wall and garden walls, as plastered boxes along
+   their lines with a coping; railings, columns, lanterns, rails, the
+   woods beyond the town, advertising columns and pumps. (Trees are
+   in trees.ts.) */
 
 export function buildWalls(city: City) {
   const group = new THREE.Group();
   group.name = 'walls';
   const solid = city.walls.filter((w) => w.kind === 'city' || w.kind === 'garden'), rails = city.walls.filter((w) => w.kind === 'railing');
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.95, side: THREE.DoubleSide });
+  const mat = weatheredWall(0xbdae94, false);
   const walls = new THREE.Mesh(wallGeometry(solid, true), mat);
   walls.castShadow = walls.receiveShadow = true;
-  const sand = new THREE.MeshStandardMaterial({ color: 0xcfc2a4, roughness: 0.9, side: THREE.DoubleSide });
+  const sand = weatheredWall(0xc9bc9e, true);
   const parapets = new THREE.Mesh(wallGeometry(city.walls.filter((w) => w.kind === 'parapet'), true), sand);
   parapets.castShadow = parapets.receiveShadow = true;
   group.add(parapets);
@@ -171,6 +40,64 @@ export function buildWalls(city: City) {
   railing.castShadow = true;
   group.add(walls, railing);
   return group;
+}
+
+/* A wall's face, in wall coordinates (u along, y up): render over
+   brick, or dressed sandstone blocks; a coping along the top in the
+   last 25 cm; the foot damp and splashed; rain run down from the
+   coping in streaks; on rendered walls patches where the render has
+   come away and the brick shows; and the surface's own unevenness. */
+function weatheredWall(colour: number, blocks: boolean) {
+  const m = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.95, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vWl;\nvarying vec3 vWlN;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvWl = uv; vWlN = normal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+      varying vec2 vWl;
+      varying vec3 vWlN;
+      vec3 wlBump = vec3(0.0);
+      float wH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float wN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(wH(i), wH(i + vec2(1, 0)), f.x), mix(wH(i + vec2(0, 1)), wH(i + vec2(1, 1)), f.x), f.y); }
+      float wF(vec2 p) { return 0.5 * wN(p) + 0.25 * wN(p * 2.1 + 3.0) + 0.125 * wN(p * 4.3 + 7.0) + 0.0625 * wN(p * 8.9 + 1.0); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float u = vWl.x, y = vWl.y;
+        bool topFace = abs(vWlN.y) > 0.5;
+        vec3 c = diffuseColor.rgb * (0.85 + 0.25 * wF(vec2(u, y) * 0.3));
+        ${blocks ? `
+        // dressed blocks, 40 cm courses, 90 cm long, fine joints
+        float row = floor(y / 0.4), bx = u / 0.9 + 0.5 * mod(row, 2.0);
+        c *= 0.88 + 0.2 * wH(vec2(floor(bx), row));
+        float jt = 1.0 - smoothstep(0.0, 0.02, min(min(fract(y / 0.4), 1.0 - fract(y / 0.4)) * 0.4, min(fract(bx), 1.0 - fract(bx)) * 0.9));
+        c *= 1.0 - 0.35 * jt;` : `
+        // where the render has come away: brick in courses, darker, redder
+        float lf = wF(vec2(u * 0.35, y * 0.5) + 17.0) + 0.12 * wN(vec2(u, y) * 9.0);
+        float loss = smoothstep(0.67, 0.685, lf) * (1.0 - smoothstep(2.0, 3.6, y));
+        // the render's broken edge stands a little proud and casts a rim
+        float rim = smoothstep(0.63, 0.67, lf) * (1.0 - loss);
+        float br = floor(y / 0.075), bx = u / 0.25 + 0.5 * mod(br, 2.0);
+        vec3 brick = vec3(0.2, 0.085, 0.05) * (0.65 + 0.5 * wH(vec2(floor(bx), br)));
+        float mort = max(step(fract(y / 0.075), 0.15), step(fract(bx), 0.06));
+        c *= 1.0 - 0.15 * rim;
+        c = mix(c, mix(brick, vec3(0.16, 0.15, 0.13), mort), loss);`}
+        // the coping, its stones or tiles darker
+        float top = vWl.y;
+        if (topFace) c = diffuseColor.rgb * vec3(0.55, 0.5, 0.46) * (0.8 + 0.3 * wN(vec2(u * 2.0, 0.0)));
+        // rain from the coping, in streaks; the foot damp and green
+        float run = wN(vec2(u * 3.1, 0.0)) * wN(vec2(u * 0.7, y * 0.2)) * smoothstep(0.0, 1.5, top);
+        c *= 1.0 - 0.45 * run * smoothstep(0.3, 0.8, wF(vec2(u * 0.6, 3.0)));
+        float foot = 1.0 - smoothstep(0.15, 0.9 + 0.6 * wN(vec2(u * 1.3, 2.0)), y);
+        c = mix(c, c * vec3(0.42, 0.46, 0.38), foot * (topFace ? 0.0 : 0.85));
+        c *= 0.8 + 0.2 * smoothstep(0.3, 0.7, wF(vec2(u, y) * 0.12 + 5.0));
+        diffuseColor.rgb = c;
+        // the surface's unevenness (in the wall's frame: along u, up y)
+        float b0 = wN(vec2(u, y) * 6.0) * 0.008, b1 = wN((vec2(u, y) + vec2(0.01, 0.0)) * 6.0) * 0.008, b2 = wN((vec2(u, y) + vec2(0.0, 0.01)) * 6.0) * 0.008;
+        vec3 wn = normalize(vWlN), wt = vec3(-wn.z, 0.0, wn.x);
+        wlBump = topFace ? vec3(0.0) : -(wt * (b1 - b0) + vec3(0.0, 1.0, 0.0) * (b2 - b0)) / 0.01;`)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(normal + (viewMatrix * vec4(wlBump, 0.0)).xyz * (gl_FrontFacing ? 1.0 : -1.0));');
+  };
+  m.customProgramCacheKey = () => blocks ? 'wall-blocks' : 'wall-render';
+  return m;
 }
 
 /* Boxes along wall lines (thick: with a top), or single sheets. */
@@ -242,7 +169,7 @@ export function buildLamps(city: City) {
   glass.onBeforeCompile = (sh) => {
     sh.uniforms.uGlow = lampGlow;
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uGlow;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.7, 0.35) * uGlow * 3.0;');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * uGlow * 3.0;');
   };
   glass.customProgramCacheKey = () => 'lampglass';
   const parts: [THREE.BufferGeometry, THREE.Material][] = [
@@ -264,10 +191,12 @@ export function buildLamps(city: City) {
 
 /* Rails: two steel strips per track, set flush in the ground (the
    horse tram's in the setts, the railway's on its ballast). Standard
-   gauge, 1435 mm. */
+   gauge, 1435 mm. A rail's head, worn bright by the wheels, is some
+   5 cm across; the grooved tram rail's groove beside it is drawn by
+   the ground's dirt. */
 export function buildRails(city: City) {
   const pos: number[] = [], nrm: number[] = [];
-  const G = 1.435 / 2, W = 0.035;
+  const G = 1.435 / 2, W = 0.026;
   for (const r of city.rails) {
     const p = r.pts;
     for (let i = 2; i < p.length; i += 2) {
@@ -288,7 +217,7 @@ export function buildRails(city: City) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  const mat = new THREE.MeshStandardMaterial({ color: 0x8c8f92, roughness: 0.25, metalness: 0.9, side: THREE.DoubleSide,
+  const mat = new THREE.MeshStandardMaterial({ color: 0x5f6164, roughness: 0.38, metalness: 0.85, side: THREE.DoubleSide,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;

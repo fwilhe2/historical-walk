@@ -39,6 +39,17 @@ export const POTSDAM: History = {
   // above all, the Nauener Straße, the Linden- and Charlottenstraße's
   // ends, the Schwertfegerstraße and the streets round the Alter Markt.
   shopStreets: ['Brandenburger Straße', 'Nauener Straße', 'Schwertfegerstraße', 'Brauerstraße', 'Friedrich-Ebert-Straße', 'Charlottenstraße', 'Lindenstraße', 'Alter Markt', 'Am Kanal', 'Breite Straße'],
+  // Boards over the shops: the trades of a Prussian town about 1900, in
+  // the spelling of before the reform of 1901 (Waaren, Cigarren, C for
+  // K), and the owner's name as such boards gave it. Illustrative: the
+  // names are made up and placed by chance, not the shops that were there.
+  signs: [
+    'COLONIALWAAREN', 'BÄCKEREI & CONDITOREI', 'FLEISCHEREI', 'CIGARREN & TABAKE', 'UHRMACHER', 'BUCHHANDLUNG',
+    'MANUFACTURWAAREN', 'WEINHANDLUNG', 'FRISEUR', 'EISENWAAREN', 'HUTMACHER', 'SCHUHWAAREN', 'DROGERIE',
+    'DELICATESSEN', 'GLAS · PORZELLAN', 'GOLD- U. SILBERWAAREN', 'KURZ-, WEISS- U. WOLLWAAREN', 'CAFÉ', 'MÖBEL-MAGAZIN',
+    'PHOTOGRAPHISCHES ATELIER', 'SEIFEN & PARFÜMERIEN', 'BUTTER · KÄSE · EIER', 'LEDERWAAREN', 'OPTIKER',
+    'C. MÜLLER', 'H. SCHULZE', 'WILH. KRAUSE', 'GEBR. LEHMANN', 'AUG. RICHTER', 'F. W. HOFFMANN', 'CARL BRANDT', 'J. G. SCHMIDT NACHF.',
+  ],
   // The royal gardens round the town, all laid out before 1900.
   regionParks: ['Park Sanssouci', 'Park Babelsberg', 'Neuer Garten', 'Glienicker Park', 'Schlossgarten Glienicke', 'Schlosspark Sacrow',
     'Jagdschlosspark', 'Marlygarten', 'Sizilianischer Garten', 'Nordischer Garten', 'Paradiesgarten', 'Holländischer Garten'],
@@ -79,8 +90,9 @@ export const POTSDAM: History = {
   squares: [
     // Between St. Nikolai's portico, the Schloss's north front with the
     // Fortunaportal, the Rathaus and the corner of the colonnade; the
-    // obelisk (1755) in its middle.
-    { name: 'Alter Markt', ring: [-45, -88, 100, -98, 104, -25, 60, -20, -45, -20] },
+    // obelisk (1755) in its middle. Paved with setts, as photographs of
+    // about 1900 show it (the pattern of the setts is not known: rows).
+    { name: 'Alter Markt', ring: [-45, -88, 100, -98, 104, -25, 60, -20, -45, -20], paving: 'setts' },
     // South of the Breite Straße west of the Lustgarten the 1903 map
     // marks a barracks ("Kas.") round an open yard — a sandy drill
     // ground, whose scattered tree symbols read as blocks. Outline from

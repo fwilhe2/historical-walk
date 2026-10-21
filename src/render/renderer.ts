@@ -18,7 +18,7 @@ document.body.prepend(renderer.domElement);
 
 export const scene = new THREE.Scene();
 
-export const FOV0 = 70;   // vertical, degrees
+export const FOV0 = 60;   // vertical, degrees (about 90° across a wide screen)
 export const camera = new THREE.PerspectiveCamera(FOV0, innerWidth / innerHeight, 0.1, 6000);
 // Yaw on the outer object, pitch on the inner: the camera never rolls.
 export const yawObj = new THREE.Object3D();

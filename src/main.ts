@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { buildBuildings, nightLight, sourceView } from './city/buildings';
 import { buildGround } from './city/ground';
-import { buildColumns, buildFixtures, buildLamps, buildRails, buildTrees, buildWalls, buildWoods, lampGlow } from './city/props';
+import { buildColumns, buildFixtures, buildLamps, buildRails, buildWalls, buildWoods, lampGlow } from './city/props';
+import { buildTrees, treeTime } from './city/trees';
+import { buildGrass } from './city/grass';
+import { buildSwifts } from './city/swifts';
+import { heightAt } from './city/terrain';
 import { buildWater, waterTime } from './city/water';
-import { buildTraffic } from './city/traffic';
-import { buildPeople } from './city/people';
 import { buildBoats } from './city/boats';
 import { setTerrain } from './city/terrain';
+import { heightField } from './city/skyview';
 import type { City } from './city/types';
 import { buildSegs } from './player/collide';
 import { stepWalker, walker } from './player/walker';
@@ -36,23 +39,25 @@ bootN.textContent = `${city.buildings.length} buildings, ${city.streets.length} 
 await new Promise((r) => setTimeout(r, 0));
 
 setTerrain(city.terrain);
-const ground = buildGround(city);
+const hf = heightField(city.buildings, city.bounds);
+const ground = buildGround(city, hf);
 scene.add(ground.mesh);
 scene.add(buildWater(city, ground));
-const buildings = buildBuildings(city.buildings);
-buildings.traverse((o) => o.layers.enable(PREPASS_LAYER));
+const buildings = buildBuildings(city.buildings, hf, city.signs);
+buildings.traverse((o) => { if (!o.userData.noPrepass) o.layers.enable(PREPASS_LAYER); });
 scene.add(buildings);
-scene.add(buildTrees(city));
+const trees = buildTrees(city);
+scene.add(trees.group);
+const grass = buildGrass(ground);
+scene.add(grass.mesh);
+const swifts = buildSwifts();
+scene.add(swifts.mesh);
 scene.add(buildWoods(city));
 scene.add(buildWalls(city));
 scene.add(buildColumns(city));
 scene.add(buildLamps(city));
 scene.add(buildFixtures(city));
 scene.add(buildRails(city));
-const traffic = buildTraffic(city);
-scene.add(traffic.group);
-const people = buildPeople(city);
-scene.add(people.group);
 const boats = buildBoats(city, ground);
 scene.add(boats.group);
 quality.apply();
@@ -60,10 +65,11 @@ const segs = buildSegs(city);
 const tour = makeTour(city);
 // The sky through the environment map (sky.ts) is the ambient light.
 // Diffuse surfaces take a little less than the open sky would give:
-// in streets the houses opposite hide much of it.
+// in streets the houses opposite hide much of it. (Walls and the
+// ground know how much: city/skyview.ts.)
 scene.traverse((o) => {
   const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-  if (m && 'envMapIntensity' in m && m.roughness > 0.3) m.envMapIntensity = 0.7;
+  if (m && 'envMapIntensity' in m && m.roughness > 0.3 && !m.userData.skyView) m.envMapIntensity = 0.7;
 });
 
 const start = parseView(location.hash);
@@ -129,7 +135,7 @@ if (probe) {
       return true;
     },
     state() {
-      return JSON.stringify({ boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), people: people.people.map((_, i) => people.where(i)).map(([x, z]) => [Math.round(x), Math.round(z), Math.round(Math.hypot(x - walker.x, z - walker.z))]).sort((a, b) => a[2]! - b[2]!).slice(0, 3), cabs: traffic.cabs.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z)]).slice(0, 4), cars: traffic.cars.map((c) => [Math.round(c.obj.position.x), Math.round(c.obj.position.z), Math.round(c.obj.rotation.y * 57.3)]), cpu: +cpuMs.toFixed(1), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray().map((v) => +v.toFixed(3)), sky: light.sky.toArray().map((v) => +v.toFixed(4)), env: !!scene.environment, hour: sunState.hour, exp: +light.exposure.toFixed(3) });
+      return JSON.stringify({ swifts: swifts.where().slice(0, 4), boats: boats.boats.map((b) => [Math.round(b.x), Math.round(b.z)]), cpu: +cpuMs.toFixed(1), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, sun: sun.intensity, dir: SUN_DIR.toArray().map((v) => +v.toFixed(3)), sky: light.sky.toArray().map((v) => +v.toFixed(4)), env: !!scene.environment, hour: sunState.hour, exp: +light.exposure.toFixed(3) });
     },
     frames(n: number) { return new Promise<void>((ok) => { let k = n; const f = () => (--k <= 0 ? ok() : frameWaiters.push(f)); frameWaiters.push(f); }); },
   };
@@ -139,7 +145,8 @@ if (probe) {
    The eight lanterns nearest you light the ground for real (point
    lights, re-chosen as you walk); the rest only glow. */
 const lampLights = Array.from({ length: 8 }, () => {
-  const l = new THREE.PointLight(0xffb060, 0, 22, 2);
+  // the Auer mantle (gas through a glowing mesh, the 1890s on) burns whiter than an open flame
+  const l = new THREE.PointLight(0xffc888, 0, 22, 2);
   scene.add(l);
   return l;
 });
@@ -160,7 +167,7 @@ function placeLampLights(glow: number) {
    Garnisonkirche, the quarters from St. Nikolai. Time runs at the
    clock's own pace, so a long walk hears them. */
 const towers = Object.fromEntries(city.labels.filter((l) => l.kind === 'landmark').map((l) => [l.text, l]));
-let hoofT = 0, lastSteps = 0, treeT = 0, nearTrees = 0, lastQuarter = Math.floor(sunState.hour * 4);
+let hoofT = 0, passT = 0, passLen = 0, passD = 60, passWait = 20, lastSteps = 0, treeT = 0, nearTrees = 0, lastQuarter = Math.floor(sunState.hour * 4);
 function stepSound(dt: number) {
   if (walker.steps !== lastSteps) {
     lastSteps = walker.steps;
@@ -171,11 +178,22 @@ function stepSound(dt: number) {
     nearTrees = 0;
     for (const t of city.trees) if ((t.x - walker.x) ** 2 + (t.z - walker.z) ** 2 < 35 * 35) nearTrees++;
   }
-  // hoofbeats of the nearest moving tram horse, four to a stride
-  let hd = Infinity;
-  for (const c of traffic.cars) if (c.wait <= 0) hd = Math.min(hd, Math.hypot(c.obj.position.x - walker.x, c.obj.position.z - walker.z));
-  for (const c of traffic.cabs) hd = Math.min(hd, Math.hypot(c.obj.position.x - walker.x, c.obj.position.z - walker.z));
-  if (hd < 80 && (hoofT -= dt) <= 0) { hoofT = 0.18 + Math.random() * 0.06; sound.hoof(hd); }
+  // A cab or a cart in a street nearby, heard and not seen: now and then
+  // hoofbeats come up out of the distance, pass, and die away, four to
+  // a stride at a trot. In town only (by day more of them, and none
+  // in the small hours).
+  if (passT > 0) {
+    passT -= dt;
+    const d = passD + Math.abs(passT - passLen / 2) * 9;
+    if ((hoofT -= dt) <= 0) { hoofT = 0.17 + Math.random() * 0.07; sound.hoof(d); }
+  } else if ((passWait -= dt) <= 0) {
+    const h = sunState.hour, busy = h > 6 && h < 21 ? 1 : h > 5 && h < 23 ? 0.4 : 0;
+    passWait = (25 + Math.random() * 60) / Math.max(0.05, busy);
+    const [bx0, bz0, bx1, bz1] = city.bounds;
+    if (busy > 0 && walker.x > bx0 && walker.x < bx1 && walker.z > bz0 && walker.z < bz1) {
+      passLen = 6 + Math.random() * 6; passT = passLen; passD = 30 + Math.random() * 60;
+    }
+  }
   const surf = ground.surface(walker.x, walker.z);
   sound.update(dt, nearTrees, surf === 'setts' || surf === 'slabs');
   const q = Math.floor(sunState.hour * 4);
@@ -199,6 +217,12 @@ renderer.setAnimationLoop(() => {
   tour.step(dt, walker);
   if (tour.on) { look.dx = look.dy = 0; }
   stepWalker(dt, segs, ground, 0.0022);
+  trees.update(dt, walker.x, walker.z);
+  grass.update(walker.x, walker.z, walker.fly);
+  // swifts from the start of May to the start of August, from dawn to dusk
+  const day = sunState.day, hr = sunState.hour;
+  swifts.step(probe ? 0 : dt, walker.x, walker.z, heightAt(walker.x, walker.z), day > 120 && day < 215 && hr > 5 && hr < 21.5);
+  for (const d of swifts.screams) sound.swift(d);
   if (!probe) sunState.hour = (sunState.hour + dt / 3600) % 24;
   stepSound(dt);
   yawObj.position.set(walker.x + Math.cos(walker.yaw) * walker.sway, walker.y, walker.z - Math.sin(walker.yaw) * walker.sway);
@@ -211,10 +235,9 @@ renderer.setAnimationLoop(() => {
   placeLampLights(lampGlow.value);
   placeShadow(walker.x, 0, walker.z, -Math.sin(walker.yaw), -Math.cos(walker.yaw));
   waterTime.value += dt;
-  // under the probe, traffic and people hold still, so shots repeat
-  traffic.step(probe ? 0 : dt);
+  treeTime.value += probe ? 0 : dt;
+  // under the probe, the boats hold still, so shots repeat
   boats.step(probe ? 0 : dt, city.water);
-  people.step(probe ? 0 : dt, walker.x, walker.z, nightLight.value);
   updateClouds(dt, walker.x, walker.z);
   hud.update(dt, walker, sunState.hour, ground, sunState.day);
   historicMap.draw(walker.x, walker.z, walker.yaw);

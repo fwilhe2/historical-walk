@@ -25,6 +25,8 @@ import { SUN_DIR, light, skyLUT, sun } from './sky';
               a small share of every pixel's light spread wide, as a
               lens does, so only what is very bright (the sun, lit
               lanterns at night) visibly glows
+     adapt    the exposure eased toward the frame's brightness, as an
+              eye or an automatic camera does (partly, within limits)
      final    exposure (sky.ts sets it from the light), AgX tone
               mapping with a gentle look, a lens's vignette, a little
               grain, dithered to 8 bits.
@@ -266,9 +268,47 @@ const upMat = pass(/* glsl */ `
     gl_FragColor = vec4(texture2D(tHigh, vUv).rgb + c / 16.0, 1.0);
   }`, { tLow: { value: null }, tHigh: { value: null }, uTexel: { value: new THREE.Vector2() } });
 
+/* ── Adaptation ─────────────────────────────────────────────────
+   The eye (and an automatic camera) opens up in a shaded lane and
+   stops down before a bright sky: the frame's exposed brightness is
+   measured (a log average over a small copy, the middle weighted) and
+   the exposure eased toward what brings it to a middle grey — only
+   partly, and within limits, so the dusk still looks dusky and a
+   sunlit square bright. It lives on the GPU in a 1×1 target, in two
+   that take turns, so nothing is read back. */
+const lumMat = pass(/* glsl */ `
+  uniform sampler2D tSrc;
+  uniform vec2 uTexel;
+  varying vec2 vUv;
+  void main() {
+    vec3 c = texture2D(tSrc, vUv + vec2(-0.25, -0.25) * uTexel).rgb + texture2D(tSrc, vUv + vec2(0.25, -0.25) * uTexel).rgb
+           + texture2D(tSrc, vUv + vec2(-0.25, 0.25) * uTexel).rgb + texture2D(tSrc, vUv + vec2(0.25, 0.25) * uTexel).rgb;
+    gl_FragColor = vec4(log2(dot(c * 0.25, vec3(0.2126, 0.7152, 0.0722)) + 1e-4), 0.0, 0.0, 1.0);
+  }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+const adaptMat = pass(/* glsl */ `
+  uniform sampler2D tLum, tPrev;
+  uniform float uExposure, uK;
+  varying vec2 vUv;
+  void main() {
+    float s = 0.0, w = 0.0;
+    for (int j = 0; j < 9; j++) for (int i = 0; i < 16; i++) {
+      vec2 uv = (vec2(float(i), float(j)) + 0.5) / vec2(16.0, 9.0);
+      vec2 d = (uv - 0.5) * vec2(1.6, 1.0);
+      float k = exp(-dot(d, d) * 4.0);
+      s += texture2D(tLum, uv).r * k; w += k;
+    }
+    // the frame's mean exposed luminance, and the factor that brings it halfway to 0.18
+    float L = exp2(s / w) * uExposure;
+    float f = clamp(pow(0.18 / max(L, 1e-5), 0.45), 0.7, 1.5);
+    float prev = texture2D(tPrev, vec2(0.5)).r;
+    gl_FragColor = vec4(prev > 0.0 ? mix(prev, f, uK) : f, 0.0, 0.0, 1.0);
+  }`, { tLum: { value: null }, tPrev: { value: null }, uExposure: { value: 1 }, uK: { value: 1 } });
+// instant under the probe, so shots do not depend on what came before
+const PROBE = QUERY.has('probe');
+
 /* ── Final: exposure, tone, lens ───────────────────────────────── */
 const finalMat = pass(/* glsl */ `
-  uniform sampler2D tComp, tBloom;
+  uniform sampler2D tComp, tBloom, tAdapt;
   uniform float uBloom, uExposure, uTime;
   uniform vec2 uRes;
   varying vec2 vUv;
@@ -299,7 +339,7 @@ const finalMat = pass(/* glsl */ `
   void main() {
     vec3 c = texture2D(tComp, vUv).rgb;
     if (uBloom > 0.0) c = mix(c, texture2D(tBloom, vUv).rgb, uBloom);
-    c *= uExposure;
+    c *= uExposure * texture2D(tAdapt, vec2(0.5)).r;
     // natural vignetting: a lens passes less light toward the corners
     vec2 q = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
     c *= 1.0 / pow(1.0 + dot(q, q) * 0.55, 2.0);
@@ -309,13 +349,15 @@ const finalMat = pass(/* glsl */ `
     c += g * (0.012 * (1.0 - c) + 1.5 / 255.0);
     gl_FragColor = vec4(c, 1.0);
   }`, {
-  tComp: { value: null }, tBloom: { value: null }, uBloom: { value: 0.035 }, uExposure: { value: 1 },
+  tComp: { value: null }, tBloom: { value: null }, tAdapt: { value: null }, uBloom: { value: 0.035 }, uExposure: { value: 1 },
   uTime: { value: 0 }, uRes: { value: new THREE.Vector2() },
 });
 
 /* ── Targets ────────────────────────────────────────────────────── */
 let W = 0, H = 0, samples = -1;
 let sceneRT: THREE.WebGLRenderTarget, compRT: THREE.WebGLRenderTarget, aoA: THREE.WebGLRenderTarget, aoB: THREE.WebGLRenderTarget;
+const lumRT = hdr(64, 36), adapt = [hdr(1, 1), hdr(1, 1)];
+let adaptI = 0, lastT = 0;
 const down: THREE.WebGLRenderTarget[] = [], up: THREE.WebGLRenderTarget[] = [];
 const size = new THREE.Vector2();
 
@@ -422,6 +464,21 @@ export function renderFrame() {
     fu.tBloom!.value = low.texture;
     fu.uBloom!.value = 0.04 / down.length;
   } else fu.uBloom!.value = 0;
+
+  // adaptation: a small log-luminance copy, then the eased factor
+  lumMat.uniforms.tSrc!.value = compRT.texture;
+  lumMat.uniforms.uTexel!.value.set(1 / 64, 1 / 36);
+  draw(lumMat, lumRT);
+  const now = clock.getElapsedTime(), dt = Math.min(0.25, now - lastT);
+  lastT = now;
+  const au = adaptMat.uniforms;
+  au.tLum!.value = lumRT.texture;
+  au.tPrev!.value = adapt[adaptI]!.texture;
+  au.uExposure!.value = light.exposure;
+  au.uK!.value = PROBE ? 1 : 1 - Math.exp(-dt / 1.2);
+  adaptI = 1 - adaptI;
+  draw(adaptMat, adapt[adaptI]!);
+  fu.tAdapt!.value = adapt[adaptI]!.texture;
 
   fu.tComp!.value = compRT.texture;
   fu.uExposure!.value = light.exposure;

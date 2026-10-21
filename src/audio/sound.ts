@@ -7,6 +7,8 @@
      the streets than in the parks.
    - Birds where there are trees: short chirped phrases, more of them
      the more trees are near.
+   - Swifts scream overhead in their season; now and then a cab is
+     heard in a street nearby.
    - Bells strike the hours from the church towers, as loud as the
      distance allows (a bell's partials: hum, prime, minor third,
      fifth, octave …, each with its own decay).
@@ -106,6 +108,33 @@ export const sound = {
     g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
     src.connect(f).connect(g).connect(master);
     src.start(t, Math.random() * 0.8, 0.12);
+  },
+  /* A swift's scream at distance d (m): a shrill buzzing "srieee",
+     a sawtooth near 5 kHz shaken fast in pitch, falling a little. */
+  swift(d: number) {
+    if (!ctx || muted) return;
+    const vol = 0.06 / (1 + d / 18);
+    if (vol < 0.004) return;
+    const t = ctx.currentTime + Math.random() * 0.2, len = 0.22 + Math.random() * 0.3;
+    const o = ctx.createOscillator(), lfo = ctx.createOscillator(), depth = ctx.createGain();
+    o.type = 'sawtooth';
+    const f0 = 4600 + Math.random() * 1600;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * 0.86, t + len);
+    lfo.frequency.value = 38 + Math.random() * 20;
+    depth.gain.value = 500;
+    lfo.connect(depth).connect(o.frequency);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = f0; bp.Q.value = 1.6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.03);
+    g.gain.setValueAtTime(vol, t + len * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0003, t + len);
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = Math.random() * 1.8 - 0.9;
+    o.connect(bp).connect(g).connect(pan).connect(master);
+    o.start(t); lfo.start(t); o.stop(t + len + 0.02); lfo.stop(t + len + 0.02);
   },
   /* A bell at distance d (m) striking n times. */
   bell(n: number, d: number, pitch: number) {
