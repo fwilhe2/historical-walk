@@ -14,7 +14,7 @@
     "city": "node tools/build-city.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "^26.6.5",
     "@types/pngjs": "^6.0.5",
     "@types/three": "0.160.0",
     "earcut": "3.0.1",
