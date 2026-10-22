@@ -8,8 +8,8 @@ standing, and the old town around the Alter Markt as it was before
 14 April 1945.
 
 ```sh
-bun install
-bun run dev        # http://localhost:5173
+npm install
+npm run dev        # http://localhost:5173
 ```
 
 Click to walk. **WASD** walk, **Shift** walk briskly, mouse looks.
@@ -23,7 +23,7 @@ the hours, St. Nikolai the quarters. The URL hash always holds your
 position, so a view can be shared.
 
 The engine follows [lunar-walk](https://github.com/fwilhe2/lunar-walk) (Vite, TypeScript,
-three r160, Bun), rebuilt small for a town instead of a planet.
+three r160), rebuilt small for a town instead of a planet.
 
 ## What is there
 
@@ -108,10 +108,10 @@ lat/lon, and so in the local frame). It is used three ways:
 
 Beyond the mapped box the Havel's lakes, the woods and the royal
 gardens (Sanssouci, Babelsberg, the Neuer Garten, Glienicke, Sacrow)
-are drawn coarsely from today's OSM (`bun run fetch potsdam region`):
+are drawn coarsely from today's OSM (`npm run fetch potsdam region`):
 water cut into the ground, woods as canopy volumes. Today's woods
 stand for the woods of 1900; parks are kept only by name. The ground
-follows a 20 m elevation grid (Terrarium tiles, `bun run fetch potsdam
+follows a 20 m elevation grid (Terrarium tiles, `npm run fetch potsdam
 dem`) relative to the town's level, held level in the town and at the
 water and rising no steeper than 1 in 3 — the Brauhausberg across the
 Havel, the Pfingstberg and the Ruinenberg; bumps under 3 m (the model
@@ -152,10 +152,10 @@ landmarks, with sources and with every estimated number marked as such.
 ## Pipeline
 
 ```sh
-bun run fetch potsdam      # data/potsdam/{osm,ohm}.json and mtb1903.png (network)
-bun run city potsdam       # src/cities/potsdam/city.json (no network)
-bun run check              # tsc: app, tests, tools
-bun run test               # vitest
+npm run fetch potsdam      # data/potsdam/{osm,ohm}.json and mtb1903.png (network)
+npm run city potsdam       # src/cities/potsdam/city.json (no network)
+npm run check              # tsc: app, tests, tools
+npm run test               # vitest
 node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]'   # screenshots (headless Firefox)
 node tools/shot.ts OUT … --fps --query=off=ao,bloom   # with frame rates, parts of the post pass off
 ```

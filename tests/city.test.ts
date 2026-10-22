@@ -4,7 +4,7 @@ import { centroid, inside } from '../src/geom/poly';
 import { heightAt, setTerrain } from '../src/city/terrain';
 import type { City } from '../src/city/types';
 
-/* The generated city (bun run city), checked for what a change to the
+/* The generated city (npm run city), checked for what a change to the
    pipeline can silently lose: whole classes of buildings, the
    landmarks, a walkable spawn. The bands are wide on purpose; a
    change that moves a count out of them should be looked at. */

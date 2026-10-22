@@ -1,5 +1,5 @@
 /* Download the raw map data for a city and keep only what the walk
-   draws. Run once (bun run fetch potsdam); the reduced files under
+   draws. Run once (npm run fetch potsdam); the reduced files under
    data/<city>/ are committed, so building the city never needs the
    network.
 

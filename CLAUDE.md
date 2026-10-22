@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A first-person walk through a historical city (Potsdam, 1900), built from map data, not procedurally: today's OpenStreetMap filtered and completed by OpenHistoricalMap's dated features and a georeferenced historical map (the Messtischblatt of 1903). TypeScript on Vite, three r160 (pinned), Bun. Shaped after [lunar-walk](https://github.com/fwilhe2/lunar-walk); a shared engine repo may be split out later, so keep engine code (render, player, ui, geom, city/massing) free of Potsdam specifics. `README.md` explains where the city comes from — read it before changing anything that decides what is shown for 1900.
+A first-person walk through a historical city (Potsdam, 1900), built from map data, not procedurally: today's OpenStreetMap filtered and completed by OpenHistoricalMap's dated features and a georeferenced historical map (the Messtischblatt of 1903). TypeScript on Vite, three r160 (pinned). Shaped after [lunar-walk](https://github.com/fwilhe2/lunar-walk); a shared engine repo may be split out later, so keep engine code (render, player, ui, geom, city/massing) free of Potsdam specifics. `README.md` explains where the city comes from — read it before changing anything that decides what is shown for 1900.
 
 ## Running
 
 ```sh
-bun install
-bun run dev                 # Vite, http://localhost:5173
-bun run check               # tsc for the app, the tests and the tools
-bun run test                # vitest (tests/*.test.ts)
-bun run fetch potsdam       # network: data/potsdam/{osm,ohm}.json, mtb1903.png
-bun run city potsdam        # data → src/cities/potsdam/city.json
+npm install
+npm run dev                 # Vite, http://localhost:5173
+npm run check               # tsc for the app, the tests and the tools
+npm run test                # vitest (tests/*.test.ts)
+npm run fetch potsdam       # network: data/potsdam/{osm,ohm}.json, mtb1903.png
+npm run city potsdam        # data → src/cities/potsdam/city.json
 node tools/shot.ts OUT 'name=#x=…&z=…&yaw=…&pitch=…&t=…[&y=…][|KeyM]'
 ```
 
-`bun run test`, not `bun test` (Vitest on Node). Tools run directly under Node's type stripping: imports with `.ts` extensions, no parameter properties or enums (`erasableSyntaxOnly` in `tools/tsconfig.json` checks this).
+`npm run test` (Vitest on Node). Tools run directly under Node's type stripping: imports with `.ts` extensions, no parameter properties or enums (`erasableSyntaxOnly` in `tools/tsconfig.json` checks this).
 
 **Verify visual changes with `tools/shot.ts`**: it starts Vite, opens the page in headless Firefox with `?probe`, sets each view through `window.hw.go(hash)` and saves PNGs; `|KeyM` after a hash presses keys first (and again after, to undo toggles). `--fps` measures the frame rate after each shot (the probe's state has `cpu`, the render's own ms); `--query=off=ao,bloom,msaa,shadow,prepass` times parts of the pipeline, `--query=debug=ao` shows the occlusion. The dev machine is a laptop iGPU: watch the frame rate. Read the PNGs. The view hash is `x`, `z` (metres, local frame), `yaw` (degrees, 0 north, 90 west), `pitch`, `t` (local solar hour; the HUD shows the clock, Central European Time since 1893), `y` (eye height — means flying). For checking data, rasterise it over the historical map with a small PIL script (data/potsdam/mtb1903.png covers `city.bounds` exactly, pixel-linear).
 
