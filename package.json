@@ -19,10 +19,10 @@
     "@types/three": "0.186.0",
     "earcut": "3.2.4",
     "pngjs": "7.0.0",
-    "puppeteer-core": "25.14.0",
+    "puppeteer-core": "25.16.0",
     "three": "0.186.1",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2",
+    "vite": "^8.3.5",
     "vitest": "^5.0.5"
   }
 }
